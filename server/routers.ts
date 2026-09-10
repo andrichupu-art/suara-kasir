@@ -141,14 +141,16 @@ function parseJsonResponse(raw: unknown) {
 function normalizeCommand(raw: unknown) {
   const parsed = parseJsonResponse(raw);
   const result = z.object({
-    action: z.enum(["add_item", "checkout", "cancel", "unknown"]),
-    items: z.array(z.object({ name: z.string(), quantity: z.number().positive() })),
-    paymentMethod: z.enum(["cash", "qr", "debit", "unknown"]),
-    reply: z.string(),
-    confidence: z.number().min(0).max(1),
+    action: z.enum(["add_item", "add", "checkout", "cancel", "unknown"]).default("unknown"),
+    type: z.enum(["add", "checkout", "cancel", "unknown"]).optional(),
+    items: z.array(z.object({ name: z.string(), quantity: z.number().positive() })).default([]),
+    paymentMethod: z.enum(["cash", "qr", "debit", "unknown"]).default("unknown"),
+    reply: z.string().default(""),
+    confidence: z.number().min(0).max(1).default(1),
   }).safeParse(parsed);
   if (!result.success) throw new Error("AI mengembalikan format yang tidak dikenali.");
-  return result.data;
+  const action = result.data.action === "add" ? "add_item" : result.data.action;
+  return { ...result.data, action: result.data.type === "add" ? "add_item" : action };
 }
 
 export const appRouter = router({
@@ -176,15 +178,13 @@ export const appRouter = router({
     }),
     parseCommand: publicProcedure.input(parseInputSchema).mutation(async ({ input }) => {
       try {
-        let raw: string;
         try {
-          raw = await callProvider(input);
-        } catch (error) {
+          return normalizeCommand(await callProvider(input));
+        } catch {
           // Some valid provider/model combinations reject structured-output options.
           // Retry as plain text because the parser already validates the JSON payload.
-          raw = await callProvider(input, { structuredOutput: false });
+          return normalizeCommand(await callProvider(input, { structuredOutput: false }));
         }
-        return normalizeCommand(raw);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Parser AI gagal.";
         throw new Error(message);
