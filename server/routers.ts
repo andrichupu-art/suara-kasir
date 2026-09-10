@@ -93,8 +93,28 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
   return data.choices?.[0]?.message?.content ?? "{}";
 }
 
+function parseJsonResponse(raw: unknown) {
+  if (typeof raw !== "string") return raw;
+
+  const text = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Some models prepend a short explanation even when JSON mode is requested.
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+    throw new Error("AI tidak mengembalikan JSON yang valid.");
+  }
+}
+
 function normalizeCommand(raw: unknown) {
-  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+  const parsed = parseJsonResponse(raw);
   const result = z.object({
     action: z.enum(["add_item", "checkout", "cancel", "unknown"]),
     items: z.array(z.object({ name: z.string(), quantity: z.number().positive() })),
