@@ -1,11 +1,11 @@
 // Use a relative import here because this file is also bundled as a Vercel
 // serverless function, where the frontend TypeScript path alias is not always
 // resolved by the function builder.
-import { COOKIE_NAME } from "../shared/const";
+import { COOKIE_NAME } from "../shared/const.js";
 import { z } from "zod";
-import { getSessionCookieOptions } from "./_core/cookies";
-import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { getSessionCookieOptions } from "./_core/cookies.js";
+import { systemRouter } from "./_core/systemRouter.js";
+import { publicProcedure, router } from "./_core/trpc.js";
 
 const catalogItemSchema = z.object({
   name: z.string(),
