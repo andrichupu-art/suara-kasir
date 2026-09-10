@@ -222,7 +222,7 @@ export default function Home() {
 
   const parseLocal = (text: string) => {
     const lower = text.toLowerCase();
-    if (/(rekap|ringkasan|laporan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
+    if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
     const product = findProduct(products, lower);
