@@ -1,4 +1,7 @@
-import { COOKIE_NAME } from "@shared/const";
+// Use a relative import here because this file is also bundled as a Vercel
+// serverless function, where the frontend TypeScript path alias is not always
+// resolved by the function builder.
+import { COOKIE_NAME } from "../shared/const";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
