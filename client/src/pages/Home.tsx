@@ -40,10 +40,10 @@ const initialProducts: Product[] = [
 ];
 
 const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
-  { value: "google", label: "Google Gemini", model: "gemini-2.0-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
+  { value: "google", label: "Google Gemini", model: "gemini-2.5-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
   { value: "groq", label: "Groq", model: "openai/gpt-oss-20b", note: "Sangat cepat untuk kasir" },
-  { value: "openrouter", label: "OpenRouter", model: "google/gemini-2.0-flash-001", note: "Banyak pilihan model" },
-  { value: "cerebras", label: "Cerebras", model: "llama-3.1-8b", note: "Respons cepat" },
+  { value: "openrouter", label: "OpenRouter", model: "google/gemini-2.5-flash", note: "Banyak pilihan model" },
+  { value: "cerebras", label: "Cerebras", model: "llama3.1-8b", note: "Respons cepat" },
 ];
 
 const currency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
@@ -101,8 +101,16 @@ export default function Home() {
   const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
   const [model, setModel] = useState(() => {
     const savedProvider = load<Provider>("suara-kasir-provider", "google");
-    const savedModel = load<string>("suara-kasir-model", "gemini-2.0-flash");
-    return savedProvider === "groq" && savedModel === "llama-3.1-8b-instant" ? "openai/gpt-oss-20b" : savedModel;
+    const savedModel = load<string>("suara-kasir-model", "");
+    const defaultModel = providerOptions.find(item => item.value === savedProvider)?.model ?? providerOptions[0].model;
+    const migrations: Record<string, string> = {
+      "gemini-2.0-flash": "gemini-2.5-flash",
+      "gemini-2.0-flash-001": "gemini-2.5-flash",
+      "google/gemini-2.0-flash-001": "google/gemini-2.5-flash",
+      "llama-3.1-8b": "llama3.1-8b",
+      "llama-3.1-8b-instant": "openai/gpt-oss-20b",
+    };
+    return migrations[savedModel] ?? (savedModel || defaultModel);
   });
   const [apiKey, setApiKey] = useState(() => load("suara-kasir-key", ""));
   const [apiKeySaved, setApiKeySaved] = useState(false);
@@ -241,9 +249,15 @@ export default function Home() {
 
   const saveSettings = async () => {
     const savedApiKey = apiKey.trim();
+    const savedModel = model.trim();
     if (!savedApiKey) {
       setApiKeySaved(false);
       toast.error("Masukkan API key terlebih dahulu");
+      return;
+    }
+    if (!savedModel) {
+      setApiKeySaved(false);
+      toast.error("Masukkan nama model terlebih dahulu");
       return;
     }
 
@@ -251,8 +265,9 @@ export default function Home() {
     // This avoids saving whitespace and prevents the UI state from diverging
     // from localStorage when the connection test fails.
     setApiKey(savedApiKey);
+    setModel(savedModel);
     localStorage.setItem("suara-kasir-provider", JSON.stringify(provider));
-    localStorage.setItem("suara-kasir-model", JSON.stringify(model.trim()));
+    localStorage.setItem("suara-kasir-model", JSON.stringify(savedModel));
     localStorage.setItem("suara-kasir-key", JSON.stringify(savedApiKey));
 
     setTestingConnection(true);
@@ -262,7 +277,7 @@ export default function Home() {
         catalog: [],
         provider,
         apiKey: savedApiKey,
-        model: model.trim(),
+        model: savedModel,
       });
       setApiKeySaved(true);
       toast.success(`${selectedProvider.label} tersambung`);
