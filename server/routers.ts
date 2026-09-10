@@ -58,8 +58,14 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
         generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
       }),
     });
-    if (!response.ok) throw new Error(`Google Gemini menolak permintaan (${response.status}).`);
-    const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`Google Gemini menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`);
+    let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Google Gemini mengembalikan respons bukan JSON: ${responseText.slice(0, 200)}`);
+    }
     return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
   }
 
@@ -85,11 +91,16 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
       ],
     }),
   });
+  const responseText = await response.text();
   if (!response.ok) {
-    const details = await response.text();
-    throw new Error(`${input.provider} menolak permintaan (${response.status})${details ? `: ${details.slice(0, 300)}` : "."}`);
+    throw new Error(`${input.provider} menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`);
   }
-  const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+  let data: { choices?: Array<{ message?: { content?: string } }> };
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(`${input.provider} mengembalikan respons bukan JSON: ${responseText.slice(0, 200)}`);
+  }
   return data.choices?.[0]?.message?.content ?? "{}";
 }
 

@@ -63,7 +63,21 @@ function speak(text: string) {
 
 function findProduct(products: Product[], phrase: string) {
   const normalized = phrase.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
-  return products.find(p => normalized.includes(p.name.toLowerCase()) || p.name.toLowerCase().split(" ").every(word => normalized.includes(word)));
+  const phraseWords = normalized.split(/\s+/).filter(Boolean);
+  if (!phraseWords.length) return undefined;
+
+  return products
+    .map(product => {
+      const productName = product.name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
+      const productWords = productName.split(/\s+/).filter(Boolean);
+      const overlap = productWords.filter(word => phraseWords.includes(word)).length;
+      const exact = normalized.includes(productName);
+      const coverage = overlap / Math.min(productWords.length, phraseWords.length);
+      const matches = exact || coverage === 1 || overlap >= 2 || (overlap > 0 && overlap / productWords.length >= 0.5);
+      return { product, score: exact ? 100 : matches ? overlap / productWords.length : 0 };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.product;
 }
 
 function numberFromText(text: string) {
@@ -91,7 +105,8 @@ export default function Home() {
     return savedProvider === "groq" && savedModel === "llama-3.1-8b-instant" ? "openai/gpt-oss-20b" : savedModel;
   });
   const [apiKey, setApiKey] = useState(() => load("suara-kasir-key", ""));
-  const [apiKeySaved, setApiKeySaved] = useState(() => Boolean(load<string>("suara-kasir-key", "").trim()));
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
@@ -210,13 +225,51 @@ export default function Home() {
         applyCommand(parseLocal(clean));
       }
     } catch (error) {
-      toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Berpindah ke mode lokal." });
-      applyCommand(parseLocal(clean));
+      const localCommand = parseLocal(clean);
+      applyCommand(localCommand);
+      if (localCommand.type === "unknown") {
+        toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
+      } else {
+        toast.info("Mode lokal digunakan", { description: "Perintah tetap diproses tanpa AI." });
+      }
     } finally {
       setStatus("idle");
       setTranscript("");
     }
   };
+
+  const saveSettings = async () => {
+    if (!apiKey.trim()) {
+      setApiKeySaved(false);
+      toast.error("Masukkan API key terlebih dahulu");
+      return;
+    }
+
+    setTestingConnection(true);
+    try {
+      await parseCommand.mutateAsync({
+        transcript: "Tes koneksi provider AI",
+        catalog: [],
+        provider,
+        apiKey: apiKey.trim(),
+        model,
+      });
+      setApiKeySaved(true);
+      toast.success(`${selectedProvider.label} tersambung`);
+    } catch (error) {
+      setApiKeySaved(false);
+      toast.error("Provider AI tidak tersambung", {
+        description: error instanceof Error ? error.message : "Periksa provider, model, dan API key.",
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!apiKeySaved || testingConnection) return;
+    void saveSettings();
+  }, [apiKeySaved]);
 
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
