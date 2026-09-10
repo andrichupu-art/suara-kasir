@@ -1,0 +1,11 @@
+{
+  "name": "SuaraKasir",
+  "short_name": "SuaraKasir",
+  "description": "Kasir pintar yang memahami suara dan bahasa sehari-hari.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#0f172a",
+  "lang": "id-ID",
+  "icons": []
+}

@@ -1,0 +1,275 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import {
+  Archive,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  CircleHelp,
+  History,
+  Mic,
+  Mic2,
+  Package,
+  Plus,
+  ReceiptText,
+  RotateCcw,
+  Save,
+  Settings2,
+  ShoppingBasket,
+  Sparkles,
+  Trash2,
+  Volume2,
+  X,
+  Zap,
+} from "lucide-react";
+
+type Product = { id: string; name: string; price: number; category: string; color: string };
+type CartItem = Product & { quantity: number };
+type Transaction = { id: string; createdAt: string; items: CartItem[]; total: number; payment: string };
+type Provider = "google" | "groq" | "openrouter" | "cerebras";
+
+const initialProducts: Product[] = [
+  { id: "kopi-susu", name: "Kopi Susu", price: 18000, category: "Minuman", color: "from-amber-100 to-orange-50" },
+  { id: "es-teh", name: "Es Teh Manis", price: 8000, category: "Minuman", color: "from-cyan-100 to-sky-50" },
+  { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, category: "Makanan", color: "from-rose-100 to-orange-50" },
+  { id: "mie-goreng", name: "Mie Goreng", price: 21000, category: "Makanan", color: "from-lime-100 to-emerald-50" },
+  { id: "air-mineral", name: "Air Mineral", price: 5000, category: "Minuman", color: "from-indigo-100 to-blue-50" },
+  { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, category: "Camilan", color: "from-yellow-100 to-amber-50" },
+];
+
+const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
+  { value: "google", label: "Google Gemini", model: "gemini-2.0-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
+  { value: "groq", label: "Groq", model: "llama-3.1-8b-instant", note: "Sangat cepat untuk kasir" },
+  { value: "openrouter", label: "OpenRouter", model: "google/gemini-2.0-flash-001", note: "Banyak pilihan model" },
+  { value: "cerebras", label: "Cerebras", model: "llama-3.1-8b", note: "Respons cepat" },
+];
+
+const currency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+const load = <T,>(key: string, fallback: T): T => {
+  try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
+};
+
+function speak(text: string) {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "id-ID";
+    utterance.rate = 1.05;
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function findProduct(products: Product[], phrase: string) {
+  const normalized = phrase.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
+  return products.find(p => normalized.includes(p.name.toLowerCase()) || p.name.toLowerCase().split(" ").every(word => normalized.includes(word)));
+}
+
+function numberFromText(text: string) {
+  const digit = text.match(/\b(\d+)\b/);
+  if (digit) return Number(digit[1]);
+  const numbers: Record<string, number> = { satu: 1, dua: 2, tiga: 3, empat: 4, lima: 5, enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10 };
+  for (const [word, value] of Object.entries(numbers)) if (text.toLowerCase().includes(word)) return value;
+  return 1;
+}
+
+export default function Home() {
+  const [activeTab, setActiveTab] = useState<"kasir" | "produk" | "riwayat" | "pengaturan">("kasir");
+  const [products, setProducts] = useState<Product[]>(() => load("suara-kasir-products", initialProducts));
+  const [transactions, setTransactions] = useState<Transaction[]>(() => load("suara-kasir-transactions", []));
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [transcript, setTranscript] = useState("");
+  const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
+  const [lastHeard, setLastHeard] = useState("");
+  const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
+  const [payment, setPayment] = useState("cash");
+  const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
+  const [model, setModel] = useState(() => load("suara-kasir-model", "gemini-2.0-flash"));
+  const [apiKey, setApiKey] = useState(() => load("suara-kasir-key", ""));
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Makanan" });
+  const recognitionRef = useRef<any>(null);
+  const parseCommand = trpc.ai.parseCommand.useMutation();
+
+  useEffect(() => {
+    localStorage.setItem("suara-kasir-products", JSON.stringify(products));
+  }, [products]);
+  useEffect(() => {
+    localStorage.setItem("suara-kasir-transactions", JSON.stringify(transactions));
+  }, [transactions]);
+  useEffect(() => {
+    localStorage.setItem("suara-kasir-provider", JSON.stringify(provider));
+    localStorage.setItem("suara-kasir-model", JSON.stringify(model));
+    localStorage.setItem("suara-kasir-key", JSON.stringify(apiKey));
+  }, [provider, model, apiKey]);
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+  }, []);
+
+  const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
+  const itemCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
+  const selectedProvider = providerOptions.find(item => item.value === provider) ?? providerOptions[0];
+
+  const addProduct = (product: Product, quantity = 1) => {
+    setCart(current => {
+      const existing = current.find(item => item.id === product.id);
+      if (existing) return current.map(item => item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item);
+      return [...current, { ...product, quantity }];
+    });
+  };
+
+  const removeProduct = (id: string) => setCart(current => current.flatMap(item => item.id === id ? (item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : []) : [item]));
+
+  const finishTransaction = (method = payment) => {
+    if (!cart.length) return;
+    const transaction: Transaction = { id: `TRX-${Date.now()}`, createdAt: new Date().toISOString(), items: cart, total, payment: method };
+    setTransactions(current => [transaction, ...current]);
+    setCart([]);
+    setPending(null);
+    const message = `Transaksi tersimpan. Total ${currency(total)} dibayar ${method === "cash" ? "tunai" : method === "qr" ? "QRIS" : "debit"}.`;
+    setLastHeard(message);
+    speak(message);
+    toast.success("Transaksi tersimpan", { description: currency(total) });
+  };
+
+  const parseLocal = (text: string) => {
+    const lower = text.toLowerCase();
+    if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
+    if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
+    const product = findProduct(products, lower);
+    if (product) return { type: "add" as const, items: [{ name: product.name, quantity: numberFromText(lower) }], reply: `${numberFromText(lower)} ${product.name} masuk keranjang.` };
+    return { type: "unknown" as const, reply: "Saya belum menemukan barangnya. Coba sebut nama produk dan jumlahnya." };
+  };
+
+  const applyCommand = (command: any) => {
+    if (command.action === "add_item") setPending({ type: "add", items: command.items, reply: command.reply });
+    else if (command.action === "checkout") setPending({ type: "checkout", payment: command.paymentMethod, reply: command.reply });
+    else if (command.action === "cancel") setPending({ type: "cancel", reply: command.reply });
+    else { setLastHeard(command.reply || "Coba sebutkan nama barangnya."); speak(command.reply || "Coba sebutkan nama barangnya."); }
+  };
+
+  const handleCommand = async (text: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    setLastHeard(clean);
+    setStatus("thinking");
+    try {
+      if (apiKey.trim()) {
+        const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey, model });
+        applyCommand(result);
+      } else {
+        applyCommand(parseLocal(clean));
+      }
+    } catch (error) {
+      toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Berpindah ke mode lokal." });
+      applyCommand(parseLocal(clean));
+    } finally {
+      setStatus("idle");
+      setTranscript("");
+    }
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.info("Browser belum mendukung input suara", { description: "Gunakan kolom teks sebagai alternatif." });
+      document.getElementById("command-input")?.focus();
+      return;
+    }
+    if (status === "listening") { recognitionRef.current?.stop(); return; }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "id-ID";
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    recognition.onstart = () => setStatus("listening");
+    recognition.onresult = (event: any) => {
+      const text = Array.from(event.results).map((result: any) => result[0].transcript).join("");
+      setTranscript(text);
+      if (event.results[event.results.length - 1].isFinal) handleCommand(text);
+    };
+    recognition.onerror = () => { setStatus("idle"); toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." }); };
+    recognition.onend = () => setStatus(current => current === "listening" ? "idle" : current);
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const confirmPending = () => {
+    if (!pending) return;
+    if (pending.type === "cancel") { setCart([]); setPending(null); speak("Keranjang dikosongkan."); toast.success("Keranjang dikosongkan"); return; }
+    if (pending.type === "checkout") { finishTransaction(pending.payment && pending.payment !== "unknown" ? pending.payment : payment); return; }
+    pending.items?.forEach(item => {
+      const product = findProduct(products, item.name);
+      if (product) addProduct(product, item.quantity);
+    });
+    setLastHeard(pending.reply);
+    speak(pending.reply);
+    toast.success("Barang ditambahkan");
+    setPending(null);
+  };
+
+  const saveProduct = () => {
+    const price = Number(newProduct.price);
+    if (!newProduct.name.trim() || !price) return toast.error("Lengkapi nama dan harga produk.");
+    setProducts(current => [...current, { id: `${newProduct.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, name: newProduct.name.trim(), price, category: newProduct.category, color: "from-violet-100 to-fuchsia-50" }]);
+    setNewProduct({ name: "", price: "", category: "Makanan" });
+    toast.success("Produk ditambahkan");
+  };
+
+  const nav = [
+    { id: "kasir" as const, label: "Kasir", icon: ShoppingBasket },
+    { id: "produk" as const, label: "Produk", icon: Package },
+    { id: "riwayat" as const, label: "Riwayat", icon: History },
+    { id: "pengaturan" as const, label: "Pengaturan", icon: Settings2 },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f7f8fa] text-slate-900">
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row">
+        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-5 py-7 lg:flex lg:flex-col">
+          <div className="mb-12 flex items-center gap-3 px-2"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-900 text-white"><Mic2 size={20} /></div><div><div className="font-extrabold tracking-tight">SuaraKasir</div><div className="text-xs text-slate-400">Kasir tanpa ribet</div></div></div>
+          <div className="space-y-2">{nav.map(item => <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${activeTab === item.id ? "bg-slate-900 text-white shadow-lg shadow-slate-200" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}><item.icon size={18} />{item.label}</button>)}</div>
+          <div className="mt-auto rounded-3xl bg-[#e7f3ee] p-4"><div className="mb-2 flex items-center gap-2 text-sm font-bold text-emerald-900"><Sparkles size={16} />Mode pintar</div><p className="text-xs leading-5 text-emerald-800/70">Sebutkan barang seperti bicara biasa. AI akan memahami jumlah dan perintahmu.</p></div>
+        </aside>
+
+        <main className="min-w-0 flex-1 pb-24 lg:pb-8">
+          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/80 bg-[#f7f8fa]/90 px-5 py-5 backdrop-blur lg:px-10">
+            <div><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{activeTab === "kasir" ? "Hari ini" : "Kelola toko"}</div><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{activeTab === "kasir" ? "Halo, Kasir." : nav.find(item => item.id === activeTab)?.label}</h1></div>
+            <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-500" />Siap melayani</div><button onClick={() => setActiveTab("pengaturan")} className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-slate-600 shadow-sm hover:bg-slate-900 hover:text-white"><Settings2 size={19} /></button></div>
+          </header>
+
+          <div className="px-5 py-6 lg:px-10">
+            {activeTab === "kasir" && <>
+              <section className="relative overflow-hidden rounded-[2rem] bg-slate-900 p-6 text-white shadow-xl shadow-slate-200 sm:p-8"><div className="relative z-[1] max-w-xl"><div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300"><Zap size={14} />Voice-first POS</div><h2 className="text-3xl font-black leading-tight sm:text-4xl">Tinggal bilang,<br /><span className="text-emerald-300">langsung beres.</span></h2><p className="mt-4 max-w-md text-sm leading-6 text-slate-300">“Tambahkan dua kopi susu dan satu es teh.”<br />SuaraKasir akan menyiapkan transaksi untuk kamu konfirmasi.</p></div><div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-[30px] border-emerald-400/10" /><div className="absolute -bottom-20 right-16 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl" /></section>
+
+              <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-600" />Input suara</div><p className="mt-1 text-xs text-slate-400">Tekan tombol, lalu bicara seperti biasa</p></div><div className={`rounded-full px-3 py-1 text-[11px] font-bold ${status === "listening" ? "bg-rose-100 text-rose-600" : status === "thinking" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{status === "listening" ? "Mendengarkan" : status === "thinking" ? "Memahami…" : "Siap"}</div></div>
+                  <button onClick={startListening} className={`group relative mx-auto grid h-36 w-36 place-items-center rounded-full border-[12px] transition sm:h-44 sm:w-44 ${status === "listening" ? "border-rose-100 bg-rose-500 shadow-2xl shadow-rose-200" : "border-emerald-100 bg-emerald-500 shadow-2xl shadow-emerald-100 hover:scale-[1.03]"}`}><div className="absolute inset-3 rounded-full border border-white/30" />{status === "listening" ? <div className="flex items-center gap-1"><span className="h-6 w-1 rounded-full bg-white animate-pulse" /><span className="h-10 w-1 rounded-full bg-white animate-pulse" /><span className="h-7 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={42} className="text-white" />}</button>
+                  <p className="mt-4 text-center text-sm font-bold text-slate-600">{status === "listening" ? "Silakan bicara…" : "Ketuk untuk bicara"}</p>
+                  <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="mt-5 flex gap-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Atau ketik perintah di sini…" className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
+                  {lastHeard && <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500"><Volume2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Terakhir: “{lastHeard}”</span></div>}
+                </div>
+
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><ReceiptText size={17} className="text-violet-600" />Pesanan berjalan</div><p className="mt-1 text-xs text-slate-400">{itemCount ? `${itemCount} item di keranjang` : "Belum ada pesanan"}</p></div>{cart.length > 0 && <button onClick={() => setCart([])} className="text-xs font-bold text-slate-400 hover:text-rose-500">Kosongkan</button>}</div>
+                  <div className="min-h-[185px]">{cart.length === 0 ? <div className="grid min-h-[185px] place-items-center rounded-3xl border border-dashed border-slate-200 text-center"><div><ShoppingBasket className="mx-auto mb-3 text-slate-300" size={30} /><p className="text-sm font-bold text-slate-400">Keranjang masih kosong</p><p className="mt-1 text-xs text-slate-400">Coba bilang “tambah kopi susu”</p></div></div> : <div className="space-y-3">{cart.map(item => <div key={item.id} className="flex items-center gap-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>}</div>
+                  <div className="mt-5 border-t border-slate-100 pt-5"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
+                </div>
+              </section>
+
+              <section className="mt-6"><div className="mb-4 flex items-end justify-between"><div><h3 className="text-lg font-black tracking-tight">Tambah cepat</h3><p className="text-xs text-slate-400">Tap produk atau sebutkan lewat suara</p></div><button onClick={() => setActiveTab("produk")} className="flex items-center gap-1 text-xs font-bold text-emerald-700">Semua produk <ChevronRight size={15} /></button></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{products.slice(0, 6).map(product => <button key={product.id} onClick={() => { addProduct(product); toast.success(`${product.name} ditambahkan`); }} className="group rounded-3xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"><div className={`mb-3 grid aspect-[1.25] place-items-center rounded-2xl bg-gradient-to-br ${product.color}`}><span className="text-2xl font-black text-slate-600/60">{product.name.charAt(0)}</span></div><div className="truncate text-xs font-bold">{product.name}</div><div className="mt-1 text-xs font-semibold text-emerald-700">{currency(product.price)}</div></button>)}</div></section>
+            </>}
+
+            {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div><div className="space-y-4"><label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Harga<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label><button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button></div></div><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div><div className="grid gap-3 sm:grid-cols-2">{products.map(product => <div key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${product.color}`}><span className="font-black text-slate-500">{product.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{product.name}</div><div className="text-xs text-slate-400">{product.category} · {currency(product.price)}</div></div>{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16} /></button>}</div>)}</div></div></section>}
+
+            {activeTab === "riwayat" && <section className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-lg font-black">Riwayat transaksi</h2><p className="mt-1 text-xs text-slate-400">Semua transaksi tersimpan di perangkat ini</p></div><History className="text-slate-300" /></div>{transactions.length === 0 ? <div className="grid min-h-[300px] place-items-center rounded-3xl border border-dashed border-slate-200 text-center"><div><Archive className="mx-auto mb-3 text-slate-300" size={32} /><p className="text-sm font-bold text-slate-400">Belum ada transaksi</p><p className="mt-1 text-xs text-slate-400">Transaksi yang disimpan akan muncul di sini</p></div></div> : <div className="space-y-3">{transactions.map(transaction => <div key={transaction.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-black">{transaction.id}</div><div className="mt-1 text-xs text-slate-400">{new Date(transaction.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div></div><div className="text-right"><div className="text-base font-black">{currency(transaction.total)}</div><div className="text-xs font-bold uppercase text-emerald-600">{transaction.payment === "cash" ? "Tunai" : transaction.payment === "qr" ? "QRIS" : "Debit"}</div></div></div><div className="mt-3 flex flex-wrap gap-2">{transaction.items.map(item => <span key={item.id} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">{item.quantity}× {item.name}</span>)}</div></div>)}</div>}</section>}
+
+            {activeTab === "pengaturan" && <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-start justify-between"><div><h2 className="text-lg font-black">Otak SuaraKasir</h2><p className="mt-1 max-w-lg text-xs leading-5 text-slate-400">Gunakan AI untuk memahami gaya bahasa bebas. API key hanya disimpan di browser perangkat ini.</p></div><Sparkles className="text-emerald-500" /></div><div className="space-y-5"><label className="block text-xs font-bold text-slate-500">Provider AI<select value={provider} onChange={e => { const next = e.target.value as Provider; setProvider(next); setModel(providerOptions.find(item => item.value === next)?.model ?? ""); }} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400">{providerOptions.map(item => <option key={item.value} value={item.value}>{item.label} — {item.note}</option>)}</select></label><label className="block text-xs font-bold text-slate-500">Nama model<input value={model} onChange={e => setModel(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">API key<input type={showApiKey ? "text" : "password"} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Tempel API key provider di sini" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /><button type="button" onClick={() => setShowApiKey(!showApiKey)} className="mt-2 text-xs font-bold text-slate-400 hover:text-slate-700">{showApiKey ? "Sembunyikan key" : "Tampilkan key"}</button></label><div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-xs leading-5 text-emerald-900"><CircleHelp size={16} className="mt-0.5 shrink-0" /><span>Tanpa API key, aplikasi tetap bisa dipakai dengan mode lokal untuk produk yang ada di katalog. Dengan AI, kamu bisa bicara lebih bebas dan memakai variasi kalimat.</span></div><button onClick={() => toast.success("Pengaturan tersimpan")} className="flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Check size={17} />Simpan pengaturan</button></div></div><div className="space-y-6"><div className="rounded-[2rem] bg-slate-900 p-6 text-white"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-300" />Contoh perintah</div><div className="space-y-3">{["Tambah dua kopi susu", "Masukin nasi goreng satu", "Simpan, bayar pakai QRIS", "Batalkan pesanan"].map(text => <button key={text} onClick={() => { setActiveTab("kasir"); setTranscript(text); }} className="flex w-full items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left text-xs font-semibold text-slate-200 hover:bg-white/15"><span>“{text}”</span><ArrowRight size={15} className="text-emerald-300" /></button>)}</div></div><div className="rounded-[2rem] bg-[#e7f3ee] p-6"><div className="flex items-center gap-2 text-sm font-black text-emerald-950"><RotateCcw size={17} />Data lokal</div><p className="mt-2 text-xs leading-5 text-emerald-900/70">Produk dan riwayat saat ini disimpan di perangkat agar MVP bisa langsung dipakai offline. Sinkronisasi multi-perangkat dapat ditambahkan berikutnya.</p></div></div></section>}
+          </div>
+        </main>
+
+        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur lg:hidden"><div className="mx-auto flex max-w-lg items-center justify-around">{nav.map(item => <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex min-w-[70px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold ${activeTab === item.id ? "text-slate-900" : "text-slate-400"}`}><item.icon size={19} /><span>{item.label}</span></button>)}</div></nav>
+      </div>
+
+      {pending && <div className="fixed inset-0 z-30 grid place-items-end bg-slate-950/30 p-4 backdrop-blur-sm sm:place-items-center"><div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-emerald-600"><Sparkles size={14} />Konfirmasi suara</div><h3 className="text-2xl font-black tracking-tight">{pending.type === "add" ? "Tambahkan ke keranjang?" : pending.type === "checkout" ? "Simpan transaksi?" : "Kosongkan keranjang?"}</h3></div><button onClick={() => setPending(null)} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white"><X size={17} /></button></div>{pending.type === "add" && <div className="mb-5 space-y-2 rounded-2xl bg-slate-50 p-4">{pending.items?.map(item => <div key={item.name} className="flex justify-between text-sm font-bold"><span>{item.quantity}× {item.name}</span><span className="text-slate-400">{(() => { const p = findProduct(products, item.name); return p ? currency(p.price * item.quantity) : "—"; })()}</span></div>)}</div>}{pending.type === "checkout" && <div className="mb-5 rounded-2xl bg-slate-50 p-4"><div className="flex justify-between text-sm font-bold"><span>{itemCount} item</span><span>{currency(total)}</span></div><div className="mt-2 text-xs text-slate-400">Pembayaran: {pending.payment === "qr" ? "QRIS" : pending.payment === "debit" ? "Debit" : "Tunai"}</div></div>}<p className="mb-6 text-sm leading-6 text-slate-500">{pending.reply}</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setPending(null)} className="rounded-2xl border border-slate-200 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Belum</button><button onClick={confirmPending} className="rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600">Ya, lanjutkan</button></div></div></div>}
+    </div>
+  );
+}
