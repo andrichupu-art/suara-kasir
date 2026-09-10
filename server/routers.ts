@@ -52,10 +52,14 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
   const prompt = promptFor(input.transcript, input.catalog);
 
   if (input.provider === "google") {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(input.apiKey)}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`;
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": input.apiKey,
+        "x-goog-api-client": "suara-kasir/1.0",
+      },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
