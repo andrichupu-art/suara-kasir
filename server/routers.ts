@@ -3,6 +3,7 @@
 // resolved by the function builder.
 import { COOKIE_NAME } from "../shared/const.js";
 import { z } from "zod";
+import { getStoreSnapshot, migrateStoreData } from "./db.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { publicProcedure, router } from "./_core/trpc.js";
@@ -18,6 +19,34 @@ const parseInputSchema = z.object({
   provider: z.enum(["google", "groq", "openrouter", "cerebras"]),
   apiKey: z.string().min(1),
   model: z.string().min(1),
+});
+
+const storeProductSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  price: z.number().int().nonnegative(),
+  stock: z.number().int().nonnegative(),
+  category: z.string().min(1),
+  color: z.string().min(1),
+});
+
+const storeTransactionSchema = z.object({
+  id: z.string().min(1),
+  createdAt: z.string().datetime(),
+  total: z.number().int().nonnegative(),
+  payment: z.string().min(1),
+  items: z.array(z.object({
+    id: z.string().min(1),
+    productId: z.string().min(1),
+    name: z.string().min(1),
+    price: z.number().int().nonnegative(),
+    quantity: z.number().int().positive(),
+  })),
+});
+
+const migrateStoreSchema = z.object({
+  products: z.array(storeProductSchema).max(1000),
+  transactions: z.array(storeTransactionSchema).max(10000),
 });
 
 const commandSchema = {
@@ -192,6 +221,26 @@ export const appRouter = router({
         throw new Error(message);
       }
     }),
+  }),
+  store: router({
+    snapshot: publicProcedure.query(async () => getStoreSnapshot()),
+    migrate: publicProcedure.input(migrateStoreSchema).mutation(async ({ input }) => migrateStoreData(
+      input.products,
+      input.transactions.map(transaction => ({
+        id: transaction.id,
+        createdAt: new Date(transaction.createdAt),
+        total: transaction.total,
+        payment: transaction.payment,
+      })),
+      input.transactions.flatMap(transaction => transaction.items.map(item => ({
+        id: item.id,
+        transactionId: transaction.id,
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      }))),
+    )),
   }),
 });
 

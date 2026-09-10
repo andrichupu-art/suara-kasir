@@ -10,9 +10,10 @@ Tinggal bicara — AI langsung pahami pesanan.
 - 🎤 **Input suara** — ucapkan pesanan seperti bicara biasa ("tambah dua kopi susu")
 - 🤖 **AI parser** — dukung Google Gemini, Groq, OpenRouter, Cerebras
 - 📦 **Manajemen produk** — tambah/hapus katalog produk
-- 🧾 **Riwayat transaksi** — tersimpan di perangkat (localStorage)
+- 🧾 **Riwayat transaksi** — tersimpan di Supabase PostgreSQL
 - 💳 **Multi metode bayar** — tunai, QRIS, debit
 - 🔇 **Mode offline** — bisa jalan tanpa API key AI
+- 🔄 **Migrasi otomatis** — data localStorage dipindahkan ke database saat pertama kali tersambung
 
 ---
 
@@ -46,6 +47,10 @@ cp .env.example .env
 pnpm install
 pnpm db:push
 ```
+
+Saat aplikasi pertama kali tersambung ke database kosong, produk dan riwayat transaksi
+yang sudah tersimpan di perangkat akan dikirim otomatis ke Supabase. Setelah itu,
+database menjadi sumber data utama dan localStorage tetap dipakai sebagai cache perangkat.
 
 ### 3. Deploy ke Vercel
 

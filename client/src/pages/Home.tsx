@@ -144,6 +144,10 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
+  const storeSnapshot = trpc.store.snapshot.useQuery(undefined, { retry: false });
+  const migrateStore = trpc.store.migrate.useMutation();
+  const cloudSyncAttempted = useRef(false);
+  const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("suara-kasir-products", JSON.stringify(products));
@@ -159,6 +163,78 @@ export default function Home() {
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (cloudSyncAttempted.current || storeSnapshot.isLoading) return;
+    cloudSyncAttempted.current = true;
+    if (storeSnapshot.error) return;
+
+    const cloudProducts = storeSnapshot.data?.products ?? [];
+    const cloudTransactions = storeSnapshot.data?.transactions ?? [];
+    if (cloudProducts.length || cloudTransactions.length) {
+      setProducts(cloudProducts.map(product => ({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        stock: product.stock,
+        category: product.category,
+        color: product.color,
+      })));
+      setTransactions(cloudTransactions.map(transaction => ({
+        id: transaction.id,
+        createdAt: new Date(transaction.createdAt).toISOString(),
+        total: transaction.total,
+        payment: transaction.payment,
+        items: transaction.items.map(item => ({
+          id: item.productId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          stock: 0,
+          category: "",
+          color: "from-slate-100 to-slate-50",
+        })),
+      })));
+      setCloudReady(true);
+      return;
+    }
+
+    migrateStore.mutate({
+      products,
+      transactions: transactions.map(transaction => ({
+        id: transaction.id,
+        createdAt: transaction.createdAt,
+        total: transaction.total,
+        payment: transaction.payment,
+        items: transaction.items.map(item => ({
+          id: `${transaction.id}-${item.id}`,
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+      })),
+    });
+    setCloudReady(true);
+  }, [migrateStore, products, storeSnapshot.data, storeSnapshot.error, storeSnapshot.isLoading, transactions]);
+  useEffect(() => {
+    if (!cloudReady || storeSnapshot.error || storeSnapshot.isLoading || !storeSnapshot.data) return;
+    migrateStore.mutate({
+      products,
+      transactions: transactions.map(transaction => ({
+        id: transaction.id,
+        createdAt: transaction.createdAt,
+        total: transaction.total,
+        payment: transaction.payment,
+        items: transaction.items.map(item => ({
+          id: `${transaction.id}-${item.id}`,
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        })),
+      })),
+    });
+  }, [cloudReady, migrateStore, products, storeSnapshot.data, storeSnapshot.error, storeSnapshot.isLoading, transactions]);
 
   const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
   const itemCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
