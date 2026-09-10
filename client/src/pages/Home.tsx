@@ -40,7 +40,7 @@ const initialProducts: Product[] = [
 ];
 
 const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
-  { value: "google", label: "Google Gemini", model: "gemini-2.5-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
+  { value: "google", label: "Google Gemini", model: "gemini-3.6-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
   { value: "groq", label: "Groq", model: "openai/gpt-oss-20b", note: "Sangat cepat untuk kasir" },
   { value: "openrouter", label: "OpenRouter", model: "google/gemini-2.5-flash", note: "Banyak pilihan model" },
   { value: "cerebras", label: "Cerebras", model: "llama3.1-8b", note: "Respons cepat" },
@@ -104,9 +104,10 @@ export default function Home() {
     const savedModel = load<string>("suara-kasir-model", "");
     const defaultModel = providerOptions.find(item => item.value === savedProvider)?.model ?? providerOptions[0].model;
     const migrations: Record<string, string> = {
-      "gemini-2.0-flash": "gemini-2.5-flash",
-      "gemini-2.0-flash-001": "gemini-2.5-flash",
-      "google/gemini-2.0-flash-001": "google/gemini-2.5-flash",
+      "gemini-2.0-flash": "gemini-3.6-flash",
+      "gemini-2.0-flash-001": "gemini-3.6-flash",
+      "gemini-2.5-flash": "gemini-3.6-flash",
+      "google/gemini-2.0-flash-001": "google/gemini-3.6-flash",
       "llama-3.1-8b": "llama3.1-8b",
       "llama-3.1-8b-instant": "openai/gpt-oss-20b",
     };
