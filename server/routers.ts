@@ -48,7 +48,11 @@ function promptFor(transcript: string, catalog: Array<{ name: string; price: num
   return `Kamu adalah mesin kasir Indonesia. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "masukin es teh satu", "sudah, bayar pakai QR", "hapus yang terakhir", atau "batalkan". Cocokkan nama barang hanya dari katalog. Jangan mengarang barang atau harga.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Untuk add_item, items berisi nama katalog dan quantity positif. Untuk checkout, items boleh kosong dan paymentMethod isi metode jika disebut. Untuk cancel, items boleh kosong. reply harus singkat dalam Bahasa Indonesia, seolah berbicara ke kasir.`;
 }
 
-async function callProvider(input: z.infer<typeof parseInputSchema>) {
+async function callProvider(
+  input: z.infer<typeof parseInputSchema>,
+  options: { structuredOutput?: boolean } = {}
+) {
+  const structuredOutput = options.structuredOutput ?? true;
   const prompt = promptFor(input.transcript, input.catalog);
 
   if (input.provider === "google") {
@@ -62,7 +66,10 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
       },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+        generationConfig: {
+          temperature: 0.1,
+          ...(structuredOutput ? { responseMimeType: "application/json" } : {}),
+        },
       }),
     });
     const responseText = await response.text();
@@ -91,7 +98,7 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
     body: JSON.stringify({
       model: input.model,
       temperature: 0.1,
-      response_format: { type: "json_object" },
+      ...(structuredOutput ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: "Keluarkan JSON valid saja sesuai instruksi." },
         { role: "user", content: prompt },
@@ -160,7 +167,7 @@ export const appRouter = router({
         // A connection test only verifies that the provider accepts the key,
         // model, and request. It must not fail because the model's response
         // differs from the cashier command schema.
-        await callProvider(input);
+        await callProvider(input, { structuredOutput: false });
         return { success: true } as const;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Provider AI gagal dihubungi.";
