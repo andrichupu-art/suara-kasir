@@ -15,12 +15,10 @@ export type TrpcContext = {
   user: User | null;
 };
 
-export async function createContext(
-  opts: { req: RequestLike; res: ResponseLike }
-): Promise<TrpcContext> {
+export async function createContext(opts: any): Promise<TrpcContext> {
   return {
-    req: opts.req,
-    res: opts.res,
+    req: opts.req as RequestLike,
+    res: opts.res as ResponseLike,
     user: null, // Auth dilepas — app ini tidak memerlukan login
   };
 }
