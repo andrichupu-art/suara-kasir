@@ -142,8 +142,30 @@ export default function Home() {
   };
 
   const applyCommand = (command: any) => {
-    if (command.action === "add_item") setPending({ type: "add", items: command.items, reply: command.reply });
-    else if (command.action === "checkout") setPending({ type: "checkout", payment: command.paymentMethod, reply: command.reply });
+    if (command.action === "add_item") {
+      const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
+      let addedItems = 0;
+
+      items.forEach(item => {
+        const product = findProduct(products, String(item.name ?? ""));
+        const quantity = Number(item.quantity);
+        if (!product || !Number.isFinite(quantity) || quantity <= 0) return;
+        addProduct(product, quantity);
+        addedItems += quantity;
+      });
+
+      if (!addedItems) {
+        const message = "Saya belum menemukan produk yang dimaksud.";
+        setLastHeard(message);
+        speak(message);
+        toast.error(message);
+        return;
+      }
+
+      setLastHeard(command.reply || "Barang ditambahkan ke keranjang.");
+      speak(command.reply || "Barang ditambahkan ke keranjang.");
+      toast.success("Barang ditambahkan ke keranjang");
+    } else if (command.action === "checkout") setPending({ type: "checkout", payment: command.paymentMethod, reply: command.reply });
     else if (command.action === "cancel") setPending({ type: "cancel", reply: command.reply });
     else { setLastHeard(command.reply || "Coba sebutkan nama barangnya."); speak(command.reply || "Coba sebutkan nama barangnya."); }
   };
