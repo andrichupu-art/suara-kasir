@@ -25,18 +25,18 @@ import {
   Zap,
 } from "lucide-react";
 
-type Product = { id: string; name: string; price: number; category: string; color: string };
+type Product = { id: string; name: string; price: number; stock: number; category: string; color: string };
 type CartItem = Product & { quantity: number };
 type Transaction = { id: string; createdAt: string; items: CartItem[]; total: number; payment: string };
 type Provider = "google" | "groq" | "openrouter" | "cerebras";
 
 const initialProducts: Product[] = [
-  { id: "kopi-susu", name: "Kopi Susu", price: 18000, category: "Minuman", color: "from-amber-100 to-orange-50" },
-  { id: "es-teh", name: "Es Teh Manis", price: 8000, category: "Minuman", color: "from-cyan-100 to-sky-50" },
-  { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, category: "Makanan", color: "from-rose-100 to-orange-50" },
-  { id: "mie-goreng", name: "Mie Goreng", price: 21000, category: "Makanan", color: "from-lime-100 to-emerald-50" },
-  { id: "air-mineral", name: "Air Mineral", price: 5000, category: "Minuman", color: "from-indigo-100 to-blue-50" },
-  { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, category: "Camilan", color: "from-yellow-100 to-amber-50" },
+  { id: "kopi-susu", name: "Kopi Susu", price: 18000, stock: 100, category: "Minuman", color: "from-amber-100 to-orange-50" },
+  { id: "es-teh", name: "Es Teh Manis", price: 8000, stock: 100, category: "Minuman", color: "from-cyan-100 to-sky-50" },
+  { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, stock: 100, category: "Makanan", color: "from-rose-100 to-orange-50" },
+  { id: "mie-goreng", name: "Mie Goreng", price: 21000, stock: 100, category: "Makanan", color: "from-lime-100 to-emerald-50" },
+  { id: "air-mineral", name: "Air Mineral", price: 5000, stock: 100, category: "Minuman", color: "from-indigo-100 to-blue-50" },
+  { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, stock: 100, category: "Camilan", color: "from-yellow-100 to-amber-50" },
 ];
 
 const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
@@ -66,6 +66,7 @@ const dateFromText = (text: string) => {
 const load = <T,>(key: string, fallback: T): T => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
+const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", initialProducts).map(product => ({ ...product, stock: Number.isFinite(product.stock) ? product.stock : 100 }));
 
 function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -106,7 +107,7 @@ function numberFromText(text: string) {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"kasir" | "produk" | "riwayat" | "pengaturan">("kasir");
-  const [products, setProducts] = useState<Product[]>(() => load("suara-kasir-products", initialProducts));
+  const [products, setProducts] = useState<Product[]>(loadProducts);
   const [transactions, setTransactions] = useState<Transaction[]>(() => load("suara-kasir-transactions", []));
   const [cart, setCart] = useState<CartItem[]>([]);
   const [transcript, setTranscript] = useState("");
@@ -133,7 +134,7 @@ export default function Home() {
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Makanan" });
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", stock: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
@@ -160,6 +161,11 @@ export default function Home() {
   const addProduct = (product: Product, quantity = 1) => {
     setCart(current => {
       const existing = current.find(item => item.id === product.id);
+      const currentQuantity = existing?.quantity ?? 0;
+      if (currentQuantity + quantity > product.stock) {
+        toast.error(`Stok ${product.name} tidak cukup`, { description: `Tersedia ${product.stock} item.` });
+        return current;
+      }
       if (existing) return current.map(item => item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item);
       return [...current, { ...product, quantity }];
     });
@@ -171,6 +177,10 @@ export default function Home() {
     if (!cart.length) return;
     const transaction: Transaction = { id: `TRX-${Date.now()}`, createdAt: new Date().toISOString(), items: cart, total, payment: method };
     setTransactions(current => [transaction, ...current]);
+    setProducts(current => current.map(product => {
+      const sold = cart.find(item => item.id === product.id)?.quantity ?? 0;
+      return sold ? { ...product, stock: product.stock - sold } : product;
+    }));
     setCart([]);
     setPending(null);
     const message = `Transaksi tersimpan. Total ${currency(total)} dibayar ${method === "cash" ? "tunai" : method === "qr" ? "QRIS" : "debit"}.`;
@@ -372,8 +382,10 @@ export default function Home() {
   const saveProduct = () => {
     const price = Number(newProduct.price);
     if (!newProduct.name.trim() || !price) return toast.error("Lengkapi nama dan harga produk.");
-    setProducts(current => [...current, { id: `${newProduct.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, name: newProduct.name.trim(), price, category: newProduct.category, color: "from-violet-100 to-fuchsia-50" }]);
-    setNewProduct({ name: "", price: "", category: "Makanan" });
+    const stock = Number(newProduct.stock);
+    if (!Number.isInteger(stock) || stock < 0) return toast.error("Stok harus berupa angka 0 atau lebih.");
+    setProducts(current => [...current, { id: `${newProduct.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, name: newProduct.name.trim(), price, stock, category: newProduct.category, color: "from-violet-100 to-fuchsia-50" }]);
+    setNewProduct({ name: "", price: "", stock: "", category: "Makanan" });
     toast.success("Produk ditambahkan");
   };
 
@@ -420,7 +432,7 @@ export default function Home() {
               <section className="mt-6"><div className="mb-4 flex items-end justify-between"><div><h3 className="text-lg font-black tracking-tight">Tambah cepat</h3><p className="text-xs text-slate-400">Tap produk atau sebutkan lewat suara</p></div><button onClick={() => setActiveTab("produk")} className="flex items-center gap-1 text-xs font-bold text-emerald-700">Semua produk <ChevronRight size={15} /></button></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{products.slice(0, 6).map(product => <button key={product.id} onClick={() => { addProduct(product); toast.success(`${product.name} ditambahkan`); }} className="group rounded-3xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md"><div className={`mb-3 grid aspect-[1.25] place-items-center rounded-2xl bg-gradient-to-br ${product.color}`}><span className="text-2xl font-black text-slate-600/60">{product.name.charAt(0)}</span></div><div className="truncate text-xs font-bold">{product.name}</div><div className="mt-1 text-xs font-semibold text-emerald-700">{currency(product.price)}</div></button>)}</div></section>
             </>}
 
-            {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div><div className="space-y-4"><label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Harga<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label><button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button></div></div><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div><div className="grid gap-3 sm:grid-cols-2">{products.map(product => <div key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${product.color}`}><span className="font-black text-slate-500">{product.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{product.name}</div><div className="text-xs text-slate-400">{product.category} · {currency(product.price)}</div></div>{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16} /></button>}</div>)}</div></div></section>}
+            {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div><div className="space-y-4"><label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Harga<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })}             placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Stok<input type="number" min="0" step="1" value={newProduct.stock} onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })} placeholder="Contoh: 20" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label><button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button></div></div><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div><div className="grid gap-3 sm:grid-cols-2">{products.map(product => <div key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${product.color}`}><span className="font-black text-slate-500">{product.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{product.name}</div>            <div className="text-xs text-slate-400">{product.category} · {currency(product.price)} · Stok {product.stock}</div></div>{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16} /></button>}</div>)}</div></div></section>}
 
             {activeTab === "riwayat" && <section className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-lg font-black">Riwayat transaksi</h2><p className="mt-1 text-xs text-slate-400">Semua transaksi tersimpan di perangkat ini</p></div><History className="text-slate-300" /></div>{transactions.length === 0 ? <div className="grid min-h-[300px] place-items-center rounded-3xl border border-dashed border-slate-200 text-center"><div><Archive className="mx-auto mb-3 text-slate-300" size={32} /><p className="text-sm font-bold text-slate-400">Belum ada transaksi</p><p className="mt-1 text-xs text-slate-400">Transaksi yang disimpan akan muncul di sini</p></div></div> : <div className="space-y-3">{transactions.map(transaction => <div key={transaction.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-black">{transaction.id}</div><div className="mt-1 text-xs text-slate-400">{new Date(transaction.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div></div><div className="text-right"><div className="text-base font-black">{currency(transaction.total)}</div><div className="text-xs font-bold uppercase text-emerald-600">{transaction.payment === "cash" ? "Tunai" : transaction.payment === "qr" ? "QRIS" : "Debit"}</div></div></div><div className="mt-3 flex flex-wrap gap-2">{transaction.items.map(item => <span key={item.id} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">{item.quantity}× {item.name}</span>)}</div></div>)}</div>}</section>}
 
