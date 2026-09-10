@@ -251,16 +251,18 @@ export default function Home() {
     if (command.action === "add_item" || command.type === "add") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
+      let matchedProducts = 0;
 
       items.forEach(item => {
         const product = findProduct(products, String(item.name ?? ""));
         const quantity = Number(item.quantity);
         if (!product || !Number.isFinite(quantity) || quantity <= 0) return;
-        addProduct(product, quantity);
-        addedItems += quantity;
+        matchedProducts += 1;
+        if (addProduct(product, quantity)) addedItems += quantity;
       });
 
       if (!addedItems) {
+        if (matchedProducts) return;
         if (fallbackText) {
           const localCommand = parseLocal(fallbackText);
           if (localCommand.type === "add") {
