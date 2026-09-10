@@ -73,7 +73,12 @@ function speak(text: string) {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "id-ID";
-    utterance.rate = 1.05;
+    utterance.rate = 0.96;
+    utterance.pitch = 1;
+    const voices = window.speechSynthesis.getVoices();
+    const indonesianVoice = voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
+      ?? voices.find(voice => voice.lang.toLowerCase().startsWith("id"));
+    if (indonesianVoice) utterance.voice = indonesianVoice;
     window.speechSynthesis.speak(utterance);
   }
 }
