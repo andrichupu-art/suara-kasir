@@ -118,6 +118,7 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
+  const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
 
   useEffect(() => {
@@ -272,7 +273,7 @@ export default function Home() {
 
     setTestingConnection(true);
     try {
-      await parseCommand.mutateAsync({
+      await testConnection.mutateAsync({
         transcript: "Tes koneksi provider AI",
         catalog: [],
         provider,

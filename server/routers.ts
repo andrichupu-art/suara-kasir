@@ -151,6 +151,18 @@ export const appRouter = router({
     }),
   }),
   ai: router({
+    testConnection: publicProcedure.input(parseInputSchema).mutation(async ({ input }) => {
+      try {
+        // A connection test only verifies that the provider accepts the key,
+        // model, and request. It must not fail because the model's response
+        // differs from the cashier command schema.
+        await callProvider(input);
+        return { success: true } as const;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Provider AI gagal dihubungi.";
+        throw new Error(message);
+      }
+    }),
     parseCommand: publicProcedure.input(parseInputSchema).mutation(async ({ input }) => {
       try {
         const raw = await callProvider(input);
