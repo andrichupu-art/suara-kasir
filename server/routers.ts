@@ -77,7 +77,7 @@ async function callProvider(
     let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     try {
       data = JSON.parse(responseText);
-    } catch {
+    } catch (error) {
       throw new Error(`Google Gemini mengembalikan respons bukan JSON: ${responseText.slice(0, 200)}`);
     }
     return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
@@ -176,7 +176,14 @@ export const appRouter = router({
     }),
     parseCommand: publicProcedure.input(parseInputSchema).mutation(async ({ input }) => {
       try {
-        const raw = await callProvider(input);
+        let raw: string;
+        try {
+          raw = await callProvider(input);
+        } catch (error) {
+          // Some valid provider/model combinations reject structured-output options.
+          // Retry as plain text because the parser already validates the JSON payload.
+          raw = await callProvider(input, { structuredOutput: false });
+        }
         return normalizeCommand(raw);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Parser AI gagal.";
