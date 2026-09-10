@@ -121,7 +121,7 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem("suara-kasir-provider", JSON.stringify(provider));
     localStorage.setItem("suara-kasir-model", JSON.stringify(model));
-    localStorage.setItem("suara-kasir-key", JSON.stringify(apiKey));
+    localStorage.setItem("suara-kasir-key", JSON.stringify(apiKey.trim()));
   }, [provider, model, apiKey]);
   useEffect(() => {
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -215,11 +215,12 @@ export default function Home() {
   const handleCommand = async (text: string) => {
     const clean = text.trim();
     if (!clean) return;
+    const savedApiKey = apiKey.trim();
     setLastHeard(clean);
     setStatus("thinking");
     try {
-      if (apiKey.trim()) {
-        const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey, model });
+      if (savedApiKey) {
+        const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey: savedApiKey, model });
         applyCommand(result, clean);
       } else {
         applyCommand(parseLocal(clean));
@@ -239,11 +240,20 @@ export default function Home() {
   };
 
   const saveSettings = async () => {
-    if (!apiKey.trim()) {
+    const savedApiKey = apiKey.trim();
+    if (!savedApiKey) {
       setApiKeySaved(false);
       toast.error("Masukkan API key terlebih dahulu");
       return;
     }
+
+    // Persist the exact values that are tested and used by subsequent commands.
+    // This avoids saving whitespace and prevents the UI state from diverging
+    // from localStorage when the connection test fails.
+    setApiKey(savedApiKey);
+    localStorage.setItem("suara-kasir-provider", JSON.stringify(provider));
+    localStorage.setItem("suara-kasir-model", JSON.stringify(model.trim()));
+    localStorage.setItem("suara-kasir-key", JSON.stringify(savedApiKey));
 
     setTestingConnection(true);
     try {
@@ -251,8 +261,8 @@ export default function Home() {
         transcript: "Tes koneksi provider AI",
         catalog: [],
         provider,
-        apiKey: apiKey.trim(),
-        model,
+        apiKey: savedApiKey,
+        model: model.trim(),
       });
       setApiKeySaved(true);
       toast.success(`${selectedProvider.label} tersambung`);
