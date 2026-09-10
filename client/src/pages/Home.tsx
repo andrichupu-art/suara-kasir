@@ -7,6 +7,7 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
+  Link2,
   History,
   Mic,
   Mic2,
@@ -40,7 +41,7 @@ const initialProducts: Product[] = [
 
 const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
   { value: "google", label: "Google Gemini", model: "gemini-2.0-flash", note: "Cocok untuk Bahasa Indonesia & JSON" },
-  { value: "groq", label: "Groq", model: "llama-3.1-8b-instant", note: "Sangat cepat untuk kasir" },
+  { value: "groq", label: "Groq", model: "openai/gpt-oss-20b", note: "Sangat cepat untuk kasir" },
   { value: "openrouter", label: "OpenRouter", model: "google/gemini-2.0-flash-001", note: "Banyak pilihan model" },
   { value: "cerebras", label: "Cerebras", model: "llama-3.1-8b", note: "Respons cepat" },
 ];
@@ -84,8 +85,13 @@ export default function Home() {
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
   const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
-  const [model, setModel] = useState(() => load("suara-kasir-model", "gemini-2.0-flash"));
+  const [model, setModel] = useState(() => {
+    const savedProvider = load<Provider>("suara-kasir-provider", "google");
+    const savedModel = load<string>("suara-kasir-model", "gemini-2.0-flash");
+    return savedProvider === "groq" && savedModel === "llama-3.1-8b-instant" ? "openai/gpt-oss-20b" : savedModel;
+  });
   const [apiKey, setApiKey] = useState(() => load("suara-kasir-key", ""));
+  const [apiKeySaved, setApiKeySaved] = useState(() => Boolean(load<string>("suara-kasir-key", "").trim()));
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
@@ -141,7 +147,7 @@ export default function Home() {
     return { type: "unknown" as const, reply: "Saya belum menemukan barangnya. Coba sebut nama produk dan jumlahnya." };
   };
 
-  const applyCommand = (command: any) => {
+  const applyCommand = (command: any, fallbackText?: string) => {
     if (command.action === "add_item") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
@@ -155,6 +161,13 @@ export default function Home() {
       });
 
       if (!addedItems) {
+        if (fallbackText) {
+          const localCommand = parseLocal(fallbackText);
+          if (localCommand.type === "add") {
+            applyCommand({ action: "add_item", items: localCommand.items, reply: localCommand.reply });
+            return;
+          }
+        }
         const message = "Saya belum menemukan produk yang dimaksud.";
         setLastHeard(message);
         speak(message);
@@ -165,7 +178,21 @@ export default function Home() {
       setLastHeard(command.reply || "Barang ditambahkan ke keranjang.");
       speak(command.reply || "Barang ditambahkan ke keranjang.");
       toast.success("Barang ditambahkan ke keranjang");
-    } else if (command.action === "checkout") setPending({ type: "checkout", payment: command.paymentMethod, reply: command.reply });
+    } else if (command.action === "checkout") {
+      if (!cart.length) {
+        const message = "Keranjang masih kosong. Tambahkan barang terlebih dahulu.";
+        setLastHeard(message);
+        speak(message);
+        toast.error(message);
+        return;
+      }
+
+      const method = command.paymentMethod && command.paymentMethod !== "unknown" ? command.paymentMethod : payment;
+      const paymentLabel = method === "qr" ? "QRIS" : method === "debit" ? "debit" : "tunai";
+      const confirmation = `Pesanan berisi ${itemCount} item dengan total ${currency(total)}, dibayar ${paymentLabel}. Apakah transaksi ini disimpan?`;
+      setPending({ type: "checkout", payment: method, reply: confirmation });
+      speak(confirmation);
+    }
     else if (command.action === "cancel") setPending({ type: "cancel", reply: command.reply });
     else { setLastHeard(command.reply || "Coba sebutkan nama barangnya."); speak(command.reply || "Coba sebutkan nama barangnya."); }
   };
@@ -178,7 +205,7 @@ export default function Home() {
     try {
       if (apiKey.trim()) {
         const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey, model });
-        applyCommand(result);
+        applyCommand(result, clean);
       } else {
         applyCommand(parseLocal(clean));
       }
@@ -284,7 +311,7 @@ export default function Home() {
 
             {activeTab === "riwayat" && <section className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-center justify-between"><div><h2 className="text-lg font-black">Riwayat transaksi</h2><p className="mt-1 text-xs text-slate-400">Semua transaksi tersimpan di perangkat ini</p></div><History className="text-slate-300" /></div>{transactions.length === 0 ? <div className="grid min-h-[300px] place-items-center rounded-3xl border border-dashed border-slate-200 text-center"><div><Archive className="mx-auto mb-3 text-slate-300" size={32} /><p className="text-sm font-bold text-slate-400">Belum ada transaksi</p><p className="mt-1 text-xs text-slate-400">Transaksi yang disimpan akan muncul di sini</p></div></div> : <div className="space-y-3">{transactions.map(transaction => <div key={transaction.id} className="rounded-2xl border border-slate-100 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-sm font-black">{transaction.id}</div><div className="mt-1 text-xs text-slate-400">{new Date(transaction.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</div></div><div className="text-right"><div className="text-base font-black">{currency(transaction.total)}</div><div className="text-xs font-bold uppercase text-emerald-600">{transaction.payment === "cash" ? "Tunai" : transaction.payment === "qr" ? "QRIS" : "Debit"}</div></div></div><div className="mt-3 flex flex-wrap gap-2">{transaction.items.map(item => <span key={item.id} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">{item.quantity}× {item.name}</span>)}</div></div>)}</div>}</section>}
 
-            {activeTab === "pengaturan" && <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-start justify-between"><div><h2 className="text-lg font-black">Otak SuaraKasir</h2><p className="mt-1 max-w-lg text-xs leading-5 text-slate-400">Gunakan AI untuk memahami gaya bahasa bebas. API key hanya disimpan di browser perangkat ini.</p></div><Sparkles className="text-emerald-500" /></div><div className="space-y-5"><label className="block text-xs font-bold text-slate-500">Provider AI<select value={provider} onChange={e => { const next = e.target.value as Provider; setProvider(next); setModel(providerOptions.find(item => item.value === next)?.model ?? ""); }} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400">{providerOptions.map(item => <option key={item.value} value={item.value}>{item.label} — {item.note}</option>)}</select></label><label className="block text-xs font-bold text-slate-500">Nama model<input value={model} onChange={e => setModel(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">API key<input type={showApiKey ? "text" : "password"} value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="Tempel API key provider di sini" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /><button type="button" onClick={() => setShowApiKey(!showApiKey)} className="mt-2 text-xs font-bold text-slate-400 hover:text-slate-700">{showApiKey ? "Sembunyikan key" : "Tampilkan key"}</button></label><div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-xs leading-5 text-emerald-900"><CircleHelp size={16} className="mt-0.5 shrink-0" /><span>Tanpa API key, aplikasi tetap bisa dipakai dengan mode lokal untuk produk yang ada di katalog. Dengan AI, kamu bisa bicara lebih bebas dan memakai variasi kalimat.</span></div><button onClick={() => toast.success("Pengaturan tersimpan")} className="flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Check size={17} />Simpan pengaturan</button></div></div><div className="space-y-6"><div className="rounded-[2rem] bg-slate-900 p-6 text-white"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-300" />Contoh perintah</div><div className="space-y-3">{["Tambah dua kopi susu", "Masukin nasi goreng satu", "Simpan, bayar pakai QRIS", "Batalkan pesanan"].map(text => <button key={text} onClick={() => { setActiveTab("kasir"); setTranscript(text); }} className="flex w-full items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left text-xs font-semibold text-slate-200 hover:bg-white/15"><span>“{text}”</span><ArrowRight size={15} className="text-emerald-300" /></button>)}</div></div><div className="rounded-[2rem] bg-[#e7f3ee] p-6"><div className="flex items-center gap-2 text-sm font-black text-emerald-950"><RotateCcw size={17} />Data lokal</div><p className="mt-2 text-xs leading-5 text-emerald-900/70">Produk dan riwayat saat ini disimpan di perangkat agar MVP bisa langsung dipakai offline. Sinkronisasi multi-perangkat dapat ditambahkan berikutnya.</p></div></div></section>}
+            {activeTab === "pengaturan" && <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-6 flex items-start justify-between"><div><h2 className="text-lg font-black">Otak SuaraKasir</h2><p className="mt-1 max-w-lg text-xs leading-5 text-slate-400">Gunakan AI untuk memahami gaya bahasa bebas. API key hanya disimpan di browser perangkat ini.</p></div><Sparkles className="text-emerald-500" /></div><div className="space-y-5"><label className="block text-xs font-bold text-slate-500">Provider AI<select value={provider} onChange={e => { const next = e.target.value as Provider; setProvider(next); setModel(providerOptions.find(item => item.value === next)?.model ?? ""); setApiKeySaved(false); }} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-400">{providerOptions.map(item => <option key={item.value} value={item.value}>{item.label} — {item.note}</option>)}</select></label><label className="block text-xs font-bold text-slate-500">Nama model<input value={model} onChange={e => { setModel(e.target.value); setApiKeySaved(false); }} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">API key<input type={showApiKey ? "text" : "password"} value={apiKey} onChange={e => { setApiKey(e.target.value); setApiKeySaved(false); }} placeholder="Tempel API key provider di sini" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /><div className="mt-2 flex items-center justify-between"><button type="button" onClick={() => setShowApiKey(!showApiKey)} className="text-xs font-bold text-slate-400 hover:text-slate-700">{showApiKey ? "Sembunyikan key" : "Tampilkan key"}</button>{apiKeySaved && <span className="flex items-center gap-1 text-xs font-bold text-emerald-600"><Link2 size={14} />Tersambung</span>}</div></label><div className="flex items-start gap-3 rounded-2xl bg-emerald-50 p-4 text-xs leading-5 text-emerald-900"><CircleHelp size={16} className="mt-0.5 shrink-0" /><span>Tanpa API key, aplikasi tetap bisa dipakai dengan mode lokal untuk produk yang ada di katalog. Dengan AI, kamu bisa bicara lebih bebas dan memakai variasi kalimat.</span></div><button onClick={() => { if (!apiKey.trim()) { setApiKeySaved(false); toast.error("Masukkan API key terlebih dahulu"); return; } setApiKeySaved(true); toast.success("Pengaturan tersimpan"); }} className="flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Check size={17} />Simpan pengaturan</button></div></div><div className="space-y-6"><div className="rounded-[2rem] bg-slate-900 p-6 text-white"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-300" />Contoh perintah</div><div className="space-y-3">{["Tambah dua kopi susu", "Masukin nasi goreng satu", "Simpan, bayar pakai QRIS", "Batalkan pesanan"].map(text => <button key={text} onClick={() => { setActiveTab("kasir"); setTranscript(text); }} className="flex w-full items-center justify-between rounded-2xl bg-white/10 px-4 py-3 text-left text-xs font-semibold text-slate-200 hover:bg-white/15"><span>“{text}”</span><ArrowRight size={15} className="text-emerald-300" /></button>)}</div></div><div className="rounded-[2rem] bg-[#e7f3ee] p-6"><div className="flex items-center gap-2 text-sm font-black text-emerald-950"><RotateCcw size={17} />Data lokal</div><p className="mt-2 text-xs leading-5 text-emerald-900/70">Produk dan riwayat saat ini disimpan di perangkat agar MVP bisa langsung dipakai offline. Sinkronisasi multi-perangkat dapat ditambahkan berikutnya.</p></div></div></section>}
           </div>
         </main>
 

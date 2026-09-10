@@ -85,7 +85,10 @@ async function callProvider(input: z.infer<typeof parseInputSchema>) {
       ],
     }),
   });
-  if (!response.ok) throw new Error(`${input.provider} menolak permintaan (${response.status}).`);
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`${input.provider} menolak permintaan (${response.status})${details ? `: ${details.slice(0, 300)}` : "."}`);
+  }
   const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
   return data.choices?.[0]?.message?.content ?? "{}";
 }
