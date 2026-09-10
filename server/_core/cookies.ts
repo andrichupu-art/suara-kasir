@@ -1,4 +1,4 @@
-import type { RequestLike } from "./context";
+import type { RequestLike } from "./context.js";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
