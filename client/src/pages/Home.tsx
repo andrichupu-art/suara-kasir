@@ -47,6 +47,22 @@ const providerOptions: Array<{ value: Provider; label: string; model: string; no
 ];
 
 const currency = (value: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+const monthNames: Record<string, number> = { januari: 0, februari: 1, maret: 2, april: 3, mei: 4, juni: 5, juli: 6, agustus: 7, september: 8, oktober: 9, november: 10, desember: 11 };
+const localDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const dateFromText = (text: string) => {
+  const iso = text.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const numeric = text.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](20\d{2})\b/);
+  if (numeric) return `${numeric[3]}-${numeric[2].padStart(2, "0")}-${numeric[1].padStart(2, "0")}`;
+  const named = text.match(/\b(\d{1,2})\s+(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\s+(20\d{2})\b/i);
+  if (named) return `${named[3]}-${String(monthNames[named[2].toLowerCase()] + 1).padStart(2, "0")}-${named[1].padStart(2, "0")}`;
+  return localDateKey(new Date());
+};
 const load = <T,>(key: string, fallback: T): T => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
@@ -165,11 +181,27 @@ export default function Home() {
 
   const parseLocal = (text: string) => {
     const lower = text.toLowerCase();
+    if (/(rekap|ringkasan|laporan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
     const product = findProduct(products, lower);
     if (product) return { type: "add" as const, items: [{ name: product.name, quantity: numberFromText(lower) }], reply: `${numberFromText(lower)} ${product.name} masuk keranjang.` };
     return { type: "unknown" as const, reply: "Saya belum menemukan barangnya. Coba sebut nama produk dan jumlahnya." };
+  };
+
+  const showSummary = (date?: string) => {
+    const targetDate = date || localDateKey(new Date());
+    const matching = transactions.filter(transaction => localDateKey(new Date(transaction.createdAt)) === targetDate);
+    const count = matching.length;
+    const itemCount = matching.reduce((sum, transaction) => sum + transaction.items.reduce((items, item) => items + item.quantity, 0), 0);
+    const amount = matching.reduce((sum, transaction) => sum + transaction.total, 0);
+    const label = new Date(`${targetDate}T00:00:00`).toLocaleDateString("id-ID", { dateStyle: "long" });
+    const message = count
+      ? `Rekap ${label}: ${count} transaksi, ${itemCount} item, total ${currency(amount)}.`
+      : `Belum ada transaksi pada ${label}.`;
+    setLastHeard(message);
+    speak(message);
+    toast.success("Rekap transaksi", { description: message });
   };
 
   const applyCommand = (command: any, fallbackText?: string) => {
@@ -203,6 +235,8 @@ export default function Home() {
       setLastHeard(command.reply || "Barang ditambahkan ke keranjang.");
       speak(command.reply || "Barang ditambahkan ke keranjang.");
       toast.success("Barang ditambahkan ke keranjang");
+    } else if (command.action === "summary" || command.type === "summary") {
+      showSummary(command.summaryDate);
     } else if (command.action === "checkout" || command.type === "checkout") {
       if (!cart.length) {
         const message = "Keranjang masih kosong. Tambahkan barang terlebih dahulu.";
