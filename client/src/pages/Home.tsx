@@ -331,7 +331,9 @@ export default function Home() {
       if (localCommand.type === "unknown") {
         toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
       } else {
-        toast.info("Mode lokal digunakan", { description: "Perintah tetap diproses tanpa AI." });
+        toast.warning("AI tidak merespons", {
+          description: `Perintah diproses lokal. ${error instanceof Error ? error.message : "Periksa koneksi provider AI."}`,
+        });
       }
     } finally {
       setStatus("idle");
