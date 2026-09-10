@@ -173,7 +173,7 @@ export default function Home() {
   };
 
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.action === "add_item") {
+    if (command.action === "add_item" || command.type === "add") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
 
@@ -203,7 +203,7 @@ export default function Home() {
       setLastHeard(command.reply || "Barang ditambahkan ke keranjang.");
       speak(command.reply || "Barang ditambahkan ke keranjang.");
       toast.success("Barang ditambahkan ke keranjang");
-    } else if (command.action === "checkout") {
+    } else if (command.action === "checkout" || command.type === "checkout") {
       if (!cart.length) {
         const message = "Keranjang masih kosong. Tambahkan barang terlebih dahulu.";
         setLastHeard(message);
@@ -212,13 +212,17 @@ export default function Home() {
         return;
       }
 
-      const method = command.paymentMethod && command.paymentMethod !== "unknown" ? command.paymentMethod : payment;
+      const method = command.paymentMethod && command.paymentMethod !== "unknown"
+        ? command.paymentMethod
+        : command.payment && command.payment !== "unknown"
+          ? command.payment
+          : payment;
       const paymentLabel = method === "qr" ? "QRIS" : method === "debit" ? "debit" : "tunai";
       const confirmation = `Pesanan berisi ${itemCount} item dengan total ${currency(total)}, dibayar ${paymentLabel}. Apakah transaksi ini disimpan?`;
       setPending({ type: "checkout", payment: method, reply: confirmation });
       speak(confirmation);
     }
-    else if (command.action === "cancel") setPending({ type: "cancel", reply: command.reply });
+    else if (command.action === "cancel" || command.type === "cancel") setPending({ type: "cancel", reply: command.reply });
     else { setLastHeard(command.reply || "Coba sebutkan nama barangnya."); speak(command.reply || "Coba sebutkan nama barangnya."); }
   };
 
