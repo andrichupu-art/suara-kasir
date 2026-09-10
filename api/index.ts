@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { type NextFunction, type Request, type Response } from "express";
+import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../server/routers";
 import { createContext } from "../server/_core/context";
@@ -22,7 +22,7 @@ app.use("/trpc", trpcMiddleware);
 
 // Keep server failures JSON-shaped. Without this, the platform's plain-text
 // error page makes the client fail with `Unexpected token 'A'` while parsing.
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+app.use((error: unknown, _req: unknown, res: any, _next: unknown) => {
   const message = error instanceof Error ? error.message : "Kesalahan server.";
   if (!res.headersSent) res.status(500).json({ error: { message } });
 });
