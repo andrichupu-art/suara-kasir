@@ -53,6 +53,12 @@ const localDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 const dateFromText = (text: string) => {
+  const dayOnly = text.match(/\btanggal\s+(\d{1,2})\b/i);
+  if (dayOnly) {
+    const now = new Date();
+    const day = Number(dayOnly[1]);
+    if (day >= 1 && day <= 31) return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   const iso = text.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
   const numeric = text.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](20\d{2})\b/);
@@ -325,7 +331,7 @@ export default function Home() {
     const lower = text.toLowerCase();
     if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
     if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
-    if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
+    if (/(rekap|ringkasan|laporan|omzet|omset|pendapatan(?:\s+penjualan)?)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(hapus|buang|hilangkan)/.test(lower)) {
       const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
@@ -598,7 +604,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f7f8fa] text-slate-900">
+    <div className="suara-kasir-app min-h-screen bg-[#f7f8fa] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row">
         <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-5 py-7 lg:flex lg:flex-col">
           <div className="mb-12 flex items-center gap-3 px-2"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-900 text-white"><Mic2 size={20} /></div><div><div className="font-extrabold tracking-tight">SuaraKasir</div><div className="text-xs text-slate-400">Kasir tanpa ribet</div></div></div>
@@ -611,9 +617,9 @@ export default function Home() {
             {activeTab === "kasir" && <>
               <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
               {cartNotice && <div className="mb-4 flex animate-in items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 fade-in slide-in-from-top-1 duration-300" role="status" aria-live="polite"><Check size={14} />{cartNotice}</div>}
-              <div className="flex h-20 items-center justify-center sm:h-28" aria-live="polite">
-                {isSpeaking && <div className="flex h-12 items-center gap-1.5" aria-label="Aplikasi sedang berbicara">
-                  {[3, 6, 10, 16, 12, 8, 14, 6, 3].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ height: `${height * 3}px`, animationDelay: `${index * 90}ms` }} />)}
+              <div className="flex h-28 items-center justify-center sm:h-36" aria-live="polite">
+                {isSpeaking && <div className="flex h-24 w-full max-w-md items-center justify-center gap-1.5 px-4" aria-label="Aplikasi sedang berbicara">
+                  {[18, 30, 44, 58, 72, 88, 64, 46, 76, 96, 68, 48, 80, 58, 38, 70, 92, 62, 42, 28, 18].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 via-emerald-400 to-teal-200 shadow-[0_0_12px_rgba(52,211,153,0.35)] animate-[wave_1.1s_ease-in-out_infinite]" style={{ height: `${height}px`, animationDelay: `${index * 55}ms` }} />)}
                 </div>}
               </div>
 
