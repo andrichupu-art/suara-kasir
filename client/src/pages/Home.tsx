@@ -122,6 +122,7 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastHeard, setLastHeard] = useState("");
+  const [cartNotice, setCartNotice] = useState("");
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
   const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
@@ -145,6 +146,7 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", stock: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
+  const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
   const storeSnapshot = trpc.store.snapshot.useQuery(undefined, { retry: false });
@@ -157,6 +159,16 @@ export default function Home() {
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
   }, []);
+
+  useEffect(() => () => {
+    if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
+  }, []);
+
+  const showCartNotice = (message: string) => {
+    if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
+    setCartNotice(message);
+    cartNoticeTimerRef.current = setTimeout(() => setCartNotice(""), 2600);
+  };
 
   useEffect(() => {
     localStorage.setItem("suara-kasir-products", JSON.stringify(products));
@@ -384,7 +396,7 @@ export default function Home() {
       if (!rejectedItems) {
         setLastHeard(command.reply || "Barang ditambahkan ke keranjang.");
         speak(command.reply || "Barang ditambahkan ke keranjang.");
-        toast.success("Barang ditambahkan ke keranjang");
+        showCartNotice("Barang ditambahkan ke keranjang");
       }
     } else if (command.action === "summary" || command.type === "summary") {
       showSummary(command.summaryDate);
@@ -519,7 +531,7 @@ export default function Home() {
     if (!added) return;
     setLastHeard(pending.reply);
     speak(pending.reply);
-    toast.success("Barang ditambahkan");
+    showCartNotice("Barang ditambahkan");
     setPending(null);
   };
 
@@ -552,7 +564,8 @@ export default function Home() {
         <main className="min-w-0 flex-1 pb-44 lg:pb-8">
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
-              <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-6"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
+              <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
+              {cartNotice && <div className="mb-4 flex animate-in items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 fade-in slide-in-from-top-1 duration-300" role="status" aria-live="polite"><Check size={14} />{cartNotice}</div>}
               <div className="flex h-20 items-center justify-center sm:h-28" aria-live="polite">
                 {isSpeaking && <div className="flex h-12 items-center gap-1.5" aria-label="Aplikasi sedang berbicara">
                   {[3, 6, 10, 16, 12, 8, 14, 6, 3].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ height: `${height * 3}px`, animationDelay: `${index * 90}ms` }} />)}
