@@ -377,9 +377,7 @@ export default function Home() {
       ? matching.length
         ? `Stok menipis: ${matching.map(product => `${product.name} tersisa ${product.stock}`).join(", ")}.`
         : "Semua item atau barang sampai saat ini aman."
-      : matching.length
-        ? `Stok aman: ${matching.map(product => `${product.name} tersisa ${product.stock}`).join(", ")}.`
-        : "Belum ada item dengan stok 5 atau lebih.";
+      : "Semua item atau barang sampai saat ini aman.";
     setLastHeard(message);
     speak(message);
     toast.info(type === "low" ? "Stok menipis" : "Stok aman", { description: message });
