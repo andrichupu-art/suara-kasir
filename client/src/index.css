@@ -84,7 +84,7 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    background: url("/bg-market.png") center / 420px auto repeat;
+    background: url("/bg-market.png") center / 320px auto repeat;
     opacity: 0.2;
   }
   #root {
