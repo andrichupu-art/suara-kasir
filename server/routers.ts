@@ -52,7 +52,7 @@ const migrateStoreSchema = z.object({
 const commandSchema = {
   type: "object",
   properties: {
-    action: { type: "string", enum: ["add_item", "checkout", "cancel", "summary", "unknown"] },
+    action: { type: "string", enum: ["add_item", "remove_item", "checkout", "cancel", "summary", "unknown"] },
     items: {
       type: "array",
       items: {
@@ -82,7 +82,7 @@ class ProviderRequestError extends Error {
 }
 
 function promptFor(transcript: string, catalog: Array<{ name: string; price: number }>) {
-  return `Kamu adalah mesin kasir Indonesia. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "masukin es teh satu", "sudah, bayar pakai QR", "hapus yang terakhir", atau "batalkan". Pahami juga permintaan "rekap transaksi hari ini", "omzet hari ini", dan "omzet tanggal 2026-09-10". Permintaan omzet diperlakukan sama seperti summary dan harus memakai action summary. Cocokkan nama barang hanya dari katalog. Jangan mengarang barang atau harga.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Untuk add_item, items berisi nama katalog dan quantity positif. Untuk checkout, items boleh kosong dan paymentMethod isi metode jika disebut. Untuk cancel, items boleh kosong. Untuk summary, summaryDate berisi tanggal YYYY-MM-DD jika tanggal disebut atau null untuk hari ini. reply harus singkat dalam Bahasa Indonesia, seolah berbicara ke kasir.`;
+  return `Kamu adalah mesin kasir Indonesia. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "masukin es teh satu", "hapus kopi susu", "hapus yang terakhir", "sudah, bayar pakai QR", atau "batalkan". Pahami juga permintaan "rekap transaksi hari ini", "omzet hari ini", dan "omzet tanggal 2026-09-10". Permintaan omzet diperlakukan sama seperti summary dan harus memakai action summary. Cocokkan nama barang hanya dari katalog. Jangan mengarang barang atau harga.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Untuk add_item, items berisi nama katalog dan quantity positif. Untuk remove_item, items berisi nama barang yang ingin dihapus dan quantity 1. Untuk checkout, items boleh kosong dan paymentMethod isi metode jika disebut. Untuk cancel, items boleh kosong. Untuk summary, summaryDate berisi tanggal YYYY-MM-DD jika tanggal disebut atau null untuk hari ini. reply harus singkat dalam Bahasa Indonesia, seolah berbicara ke kasir.`;
 }
 
 async function callProvider(
@@ -191,8 +191,8 @@ function parseJsonResponse(raw: unknown) {
 function normalizeCommand(raw: unknown) {
   const parsed = parseJsonResponse(raw);
   const result = z.object({
-    action: z.enum(["add_item", "add", "checkout", "cancel", "summary", "unknown"]).default("unknown"),
-    type: z.enum(["add", "checkout", "cancel", "summary", "unknown"]).optional(),
+    action: z.enum(["add_item", "remove_item", "add", "remove", "checkout", "cancel", "summary", "unknown"]).default("unknown"),
+    type: z.enum(["add", "remove", "checkout", "cancel", "summary", "unknown"]).optional(),
     items: z.array(z.object({ name: z.string(), quantity: z.number().positive() })).default([]),
     paymentMethod: z.enum(["cash", "qr", "debit", "unknown"]).default("unknown"),
     summaryDate: z.string().nullable().optional(),
@@ -201,7 +201,7 @@ function normalizeCommand(raw: unknown) {
   }).safeParse(parsed);
   if (!result.success) throw new Error("AI mengembalikan format yang tidak dikenali.");
   const action = result.data.action === "add" ? "add_item" : result.data.action;
-  return { ...result.data, action: result.data.type === "add" ? "add_item" : result.data.type === "summary" ? "summary" : action };
+  return { ...result.data, action: result.data.type === "add" ? "add_item" : result.data.type === "remove" ? "remove_item" : result.data.type === "summary" ? "summary" : action };
 }
 
 export const appRouter = router({

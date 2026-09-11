@@ -325,6 +325,13 @@ export default function Home() {
     const lower = text.toLowerCase();
     if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
+    if (/(hapus|buang|hilangkan)/.test(lower)) {
+      const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
+      const product = target && findProduct(products, target);
+      if (product && cart.some(item => item.id === product.id)) return { type: "remove" as const, items: [{ name: product.name, quantity: 1 }], reply: `${product.name} dihapus dari transaksi.` };
+      if (/(terakhir|yang baru saja)/.test(lower) && cart[0]) return { type: "remove" as const, items: [{ name: cart[0].name, quantity: 1 }], reply: `${cart[0].name} dihapus dari transaksi.` };
+      return { type: "unknown" as const, reply: "Sebutkan nama barang yang ingin dihapus." };
+    }
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
     const matches = products
       .map(product => ({ product, position: lower.indexOf(normalizedProductName(product.name)) }))
@@ -363,7 +370,26 @@ export default function Home() {
   };
 
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.action === "add_item" || command.type === "add") {
+    if (command.action === "remove_item" || command.type === "remove") {
+      const items: Array<{ name?: unknown }> = Array.isArray(command.items) ? command.items : [];
+      const removed = items.some(item => {
+        const product = findProduct(products, String(item.name ?? ""));
+        if (!product || !cart.some(cartItem => cartItem.id === product.id)) return false;
+        removeCartItem(product.id);
+        return true;
+      });
+      if (removed) {
+        const reply = command.reply || "Barang dihapus dari transaksi.";
+        setLastHeard(reply);
+        speak(reply);
+        showCartNotice("Barang dihapus dari transaksi");
+      } else {
+        const message = "Barang tersebut tidak ada di transaksi.";
+        setLastHeard(message);
+        speak(message);
+        toast.error(message);
+      }
+    } else if (command.action === "add_item" || command.type === "add") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
       let matchedProducts = 0;
