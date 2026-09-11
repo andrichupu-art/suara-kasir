@@ -288,6 +288,7 @@ export default function Home() {
   };
 
   const removeProduct = (id: string) => setCart(current => current.flatMap(item => item.id === id ? (item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : []) : [item]));
+  const removeCartItem = (id: string) => setCart(current => current.filter(item => item.id !== id));
 
   const finishTransaction = (method = payment) => {
     if (!cart.length) return;
@@ -322,8 +323,17 @@ export default function Home() {
 
   const parseLocal = (text: string) => {
     const lower = text.toLowerCase();
+    if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
+    if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
     if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
+    if (/(hapus|buang|hilangkan)/.test(lower)) {
+      const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
+      const product = target && findProduct(products, target);
+      if (product && cart.some(item => item.id === product.id)) return { type: "remove" as const, items: [{ name: product.name, quantity: 1 }], reply: `${product.name} dihapus dari transaksi.` };
+      if (/(terakhir|yang baru saja)/.test(lower) && cart[0]) return { type: "remove" as const, items: [{ name: cart[0].name, quantity: 1 }], reply: `${cart[0].name} dihapus dari transaksi.` };
+      return { type: "unknown" as const, reply: "Sebutkan nama barang yang ingin dihapus." };
+    }
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
     const matches = products
       .map(product => ({ product, position: lower.indexOf(normalizedProductName(product.name)) }))
@@ -361,8 +371,43 @@ export default function Home() {
     toast.success("Rekap transaksi", { description: message });
   };
 
+  const showStockReport = (type: "low" | "safe") => {
+    const matching = products.filter(product => type === "low" ? product.stock < 5 : product.stock >= 5);
+    const message = type === "low"
+      ? matching.length
+        ? `Stok menipis: ${matching.map(product => `${product.name} tersisa ${product.stock}`).join(", ")}.`
+        : "Semua item atau barang sampai saat ini aman."
+      : "Semua item atau barang sampai saat ini aman.";
+    setLastHeard(message);
+    speak(message);
+    toast.info(type === "low" ? "Stok menipis" : "Stok aman", { description: message });
+  };
+
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.action === "add_item" || command.type === "add") {
+    if (command.action === "stock_low" || command.type === "stock_low") {
+      showStockReport("low");
+    } else if (command.action === "stock_safe" || command.type === "stock_safe") {
+      showStockReport("safe");
+    } else if (command.action === "remove_item" || command.type === "remove") {
+      const items: Array<{ name?: unknown }> = Array.isArray(command.items) ? command.items : [];
+      const removed = items.some(item => {
+        const product = findProduct(products, String(item.name ?? ""));
+        if (!product || !cart.some(cartItem => cartItem.id === product.id)) return false;
+        removeCartItem(product.id);
+        return true;
+      });
+      if (removed) {
+        const reply = command.reply || "Barang dihapus dari transaksi.";
+        setLastHeard(reply);
+        speak(reply);
+        showCartNotice("Barang dihapus dari transaksi");
+      } else {
+        const message = "Barang tersebut tidak ada di transaksi.";
+        setLastHeard(message);
+        speak(message);
+        toast.error(message);
+      }
+    } else if (command.action === "add_item" || command.type === "add") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
       let matchedProducts = 0;
@@ -578,7 +623,7 @@ export default function Home() {
                 </div>
 
                 {cart.length > 0 && <div className="fixed bottom-[252px] left-5 right-5 z-10 max-h-[300px] overflow-y-auto rounded-[2rem] bg-transparent p-0 shadow-none lg:static lg:max-h-none lg:overflow-visible lg:rounded-[2rem] lg:bg-white lg:p-5 lg:shadow-sm">
-                  <div className="flex w-full origin-bottom flex-col justify-end gap-1 text-xs [&>div]:scale-y-[0.9]">{cart.map(item => <div key={item.id}                   className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>
+                  <div className="flex w-full origin-bottom flex-col justify-end gap-1 text-xs [&>div]:scale-y-[0.9]">{cart.map(item => <div key={item.id} className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-1"><button onClick={() => removeProduct(item.id)} aria-label={`Kurangi ${item.name}`} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} aria-label={`Tambah ${item.name}`} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button><button onClick={() => removeCartItem(item.id)} aria-label={`Hapus ${item.name} dari transaksi`} className="ml-1 grid h-7 w-7 place-items-center rounded-lg text-slate-300 transition hover:bg-rose-100 hover:text-rose-600"><Trash2 size={14} /></button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>
                 </div>}
               </section>
               <div className="fixed bottom-[102px] left-0 right-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:mt-6 lg:border lg:border-slate-100 lg:rounded-[2rem] lg:px-6">
