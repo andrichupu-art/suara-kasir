@@ -325,7 +325,7 @@ export default function Home() {
     const lower = text.toLowerCase();
     if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
     if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
-    if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
+    if (/(rekap|ringkasan|laporan|omzet|omset|pendapatan(?:\s+penjualan)?)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(hapus|buang|hilangkan)/.test(lower)) {
       const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
