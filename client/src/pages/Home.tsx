@@ -526,11 +526,6 @@ export default function Home() {
         </aside>
 
         <main className="min-w-0 flex-1 pb-24 lg:pb-8">
-          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/80 bg-[#f7f8fa]/90 px-5 py-5 backdrop-blur lg:px-10">
-            <div><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{activeTab === "kasir" ? "Hari ini" : "Kelola toko"}</div><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{activeTab === "kasir" ? "Halo, Kasir." : nav.find(item => item.id === activeTab)?.label}</h1></div>
-            <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-500" />Siap melayani</div><button onClick={() => setActiveTab("pengaturan")} className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-slate-600 shadow-sm hover:bg-slate-900 hover:text-white"><Settings2 size={19} /></button></div>
-          </header>
-
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
               <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
