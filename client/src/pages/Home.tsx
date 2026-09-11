@@ -110,6 +110,7 @@ function numberFromText(text: string) {
   for (const [word, value] of Object.entries(numbers)) if (text.toLowerCase().includes(word)) return value;
   return 1;
 }
+const normalizedProductName = (name: string) => name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"kasir" | "produk" | "riwayat" | "pengaturan">("kasir");
@@ -312,6 +313,20 @@ export default function Home() {
     if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
+    const matches = products
+      .map(product => ({ product, position: lower.indexOf(normalizedProductName(product.name)) }))
+      .filter(match => match.position >= 0)
+      .sort((a, b) => a.position - b.position);
+    if (matches.length > 1) {
+      return {
+        type: "add" as const,
+        items: matches.map((match, index) => ({
+          name: match.product.name,
+          quantity: numberFromText(lower.slice(index ? matches[index - 1].position : 0, match.position)),
+        })),
+        reply: `${matches.length} barang masuk keranjang.`,
+      };
+    }
     const product = findProduct(products, lower);
     if (product) return { type: "add" as const, items: [{ name: product.name, quantity: numberFromText(lower) }], reply: `${numberFromText(lower)} ${product.name} masuk keranjang.` };
     return { type: "unknown" as const, reply: "Saya belum menemukan barangnya. Coba sebut nama produk dan jumlahnya." };
@@ -551,8 +566,8 @@ export default function Home() {
                   {lastHeard && <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500"><Volume2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Terakhir: "{lastHeard}"</span></div>}
                 </div>
 
-                {cart.length > 0 && <div className="fixed bottom-[222px] left-5 right-5 z-10 max-h-[420px] overflow-y-auto rounded-[2rem] bg-transparent p-0 shadow-none lg:static lg:max-h-none lg:overflow-visible lg:rounded-[2rem] lg:bg-white lg:p-5 lg:shadow-sm">
-                  <div className="flex w-full flex-col justify-end gap-3">{cart.map(item => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>
+                {cart.length > 0 && <div className="fixed bottom-[222px] left-5 right-5 z-10 max-h-[330px] overflow-y-auto rounded-[2rem] bg-transparent p-0 shadow-none lg:static lg:max-h-none lg:overflow-visible lg:rounded-[2rem] lg:bg-white lg:p-5 lg:shadow-sm">
+                  <div className="flex w-full origin-bottom flex-col justify-end gap-1 text-xs [&>div]:scale-y-[0.9]">{cart.map(item => <div key={item.id}                   className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>
                 </div>}
               </section>
               <div className="fixed bottom-[74px] left-0 right-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:mt-6 lg:border lg:border-slate-100 lg:rounded-[2rem] lg:px-6">
