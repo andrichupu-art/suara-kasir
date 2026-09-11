@@ -399,6 +399,21 @@ export default function Home() {
       const labels = { kasir: "Kasir", produk: "Produk", riwayat: "Riwayat", pengaturan: "Pengaturan" } as const;
       return { type: "navigate" as const, tab, reply: `Membuka tab ${labels[tab]}.` };
     }
+    const stockQuestion = lower.match(/^(?:berapa\s+)?(?:sisa\s+)?stok(?:nya)?\s+(.+?)(?:\s+berapa)?$/);
+    if (stockQuestion && !/\b(tambah|isi|masukkan|input|atur|ubah|set|jadi|menjadi)\b/.test(lower)) {
+      const product = findProduct(products, stockQuestion[1]);
+      if (product) return { type: "stock_query" as const, name: product.name, reply: `Stok ${product.name} tersisa ${product.stock}.` };
+    }
+    const priceQuestion = lower.match(/^(?:berapa\s+)?(?:harga\s+)?(jual|jualan|modal|beli)\s+(.+?)(?:\s+berapa)?$/);
+    if (priceQuestion) {
+      const product = findProduct(products, priceQuestion[2]);
+      if (product) return {
+        type: "price_query" as const,
+        name: product.name,
+        field: /modal|beli/.test(priceQuestion[1]) ? "costPrice" : "price",
+        reply: "",
+      };
+    }
     const stockUpdate = lower.match(/^(?:(?:stok)\s+(.+?)|(?:tambah|isi|masukkan|input|atur|ubah|set)\s+(?:stok\s+)?(.+?))(?:\s+(?:jadi|menjadi|sebanyak|sejumlah))?\s+(\d+)$/);
     if (stockUpdate) {
       const product = findProduct(products, stockUpdate[1] ?? stockUpdate[2] ?? "");
@@ -499,12 +514,32 @@ export default function Home() {
   };
 
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.type === "navigate") {
+    if (command.action === "stock_query" || command.type === "stock_query") {
+      const item = Array.isArray(command.items) ? command.items[0] : undefined;
+      const product = findProduct(products, String(command.name ?? item?.name ?? ""));
+      const reply = product ? `Stok ${product.name} tersisa ${product.stock}.` : command.reply || "Produk yang dimaksud tidak ditemukan.";
+      setLastHeard(reply);
+      speak(reply);
+    } else if (command.action === "price_query" || command.type === "price_query") {
+      const item = Array.isArray(command.items) ? command.items[0] : undefined;
+      const product = findProduct(products, String(command.name ?? item?.name ?? ""));
+      const field = command.field === "costPrice" || /modal|beli/i.test(String(command.reply ?? "")) ? "costPrice" : "price";
+      const reply = product
+        ? `${field === "costPrice" ? "Harga modal" : "Harga jual"} ${product.name} adalah ${currency(product[field])}.`
+        : command.reply || "Produk yang dimaksud tidak ditemukan.";
+      setLastHeard(reply);
+      speak(reply);
+    } else if (command.type === "navigate") {
       const tab = command.tab as "kasir" | "produk" | "riwayat" | "pengaturan";
       setReportDate(null);
       setActiveTab(tab);
       setLastHeard(command.reply);
       speak(command.reply);
+    } else if (command.type === "stock_query") {
+      const product = findProduct(products, String(command.name ?? ""));
+      const reply = product ? `Stok ${product.name} tersisa ${product.stock}.` : "Produk yang dimaksud tidak ditemukan.";
+      setLastHeard(reply);
+      speak(reply);
     } else if (command.type === "stock_update") {
       const product = findProduct(products, String(command.name ?? ""));
       if (!product) {
@@ -694,7 +729,7 @@ export default function Home() {
       if (localCommand.type !== "unknown") {
         applyCommand(localCommand, clean);
       } else if (savedApiKey) {
-        const result = await parseCommand.mutateAsync({ transcript: context, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey: savedApiKey, model });
+        const result = await parseCommand.mutateAsync({ transcript: context, catalog: products.map(({ name, price, costPrice, stock }) => ({ name, price, costPrice, stock })), provider, apiKey: savedApiKey, model });
         applyCommand(result, clean);
         setConversationHistory(current => [...current.slice(-4), { user: clean, assistant: result.reply || "Perintah diproses." }]);
       } else {

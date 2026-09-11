@@ -11,6 +11,8 @@ import { publicProcedure, router } from "./_core/trpc.js";
 const catalogItemSchema = z.object({
   name: z.string(),
   price: z.number(),
+  costPrice: z.number().optional(),
+  stock: z.number().optional(),
 });
 
 const parseInputSchema = z.object({
@@ -53,7 +55,7 @@ const migrateStoreSchema = z.object({
 const commandSchema = {
   type: "object",
   properties: {
-    action: { type: "string", enum: ["add_item", "remove_item", "stock_low", "stock_safe", "checkout", "cancel", "summary", "unknown"] },
+    action: { type: "string", enum: ["add_item", "remove_item", "stock_query", "price_query", "stock_low", "stock_safe", "checkout", "cancel", "summary", "unknown"] },
     items: {
       type: "array",
       items: {
@@ -83,7 +85,7 @@ class ProviderRequestError extends Error {
 }
 
 function promptFor(transcript: string, catalog: Array<{ name: string; price: number }>) {
-  return `Kamu adalah mesin kasir Indonesia. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "masukin es teh satu", "hapus kopi susu", "hapus yang terakhir", "stok menipis", "stok masih banyak", "sudah, bayar pakai QR", atau "batalkan". Pahami juga permintaan "rekap transaksi hari ini", "omzet hari ini", "omset hari ini", "pendapatan hari ini", dan "omzet tanggal 2026-09-10". Permintaan omzet, omset, atau pendapatan diperlakukan sama seperti summary dan harus memakai action summary. Cocokkan nama barang hanya dari katalog. Jangan mengarang barang atau harga.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Untuk add_item, items berisi nama katalog dan quantity positif. Untuk remove_item, items berisi nama barang yang ingin dihapus dan quantity 1. Untuk stock_low, gunakan saat kasir menanyakan stok menipis atau stok sedikit. Untuk stock_safe, gunakan saat kasir menanyakan stok aman, cukup, atau masih banyak. Untuk checkout, items boleh kosong dan paymentMethod isi metode jika disebut. Untuk cancel, items boleh kosong. Untuk summary, summaryDate berisi tanggal YYYY-MM-DD jika tanggal disebut atau null untuk hari ini. reply harus singkat dalam Bahasa Indonesia, seolah berbicara ke kasir.`;
+  return `Kamu adalah mesin kasir Indonesia. Pilih tepat satu action sesuai maksud ucapan. Jangan gunakan add_item untuk pertanyaan tentang stok atau harga. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "hapus kopi susu", "stok menipis", "berapa sisa stok es teh", "berapa harga jual kopi", "sudah bayar", atau "batalkan". Pahami juga permintaan omzet dan rekap transaksi. Cocokkan nama barang hanya dari katalog.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Gunakan stock_query untuk pertanyaan jumlah stok produk tertentu, price_query untuk pertanyaan harga jual atau modal produk tertentu, stock_low/stock_safe untuk laporan stok umum, add_item hanya untuk menambah keranjang, remove_item untuk menghapus dari keranjang, checkout untuk membayar, dan summary untuk laporan transaksi. Untuk query, items berisi produk yang ditanyakan dan reply harus menyebutkan data dari katalog. Jangan mengarang harga atau stok.`;
 }
 
 async function callProvider(
