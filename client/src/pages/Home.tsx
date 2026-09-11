@@ -127,6 +127,7 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<"standby" | "active" | "sleeping">("sleeping");
   const [lastHeard, setLastHeard] = useState("");
   const [cartNotice, setCartNotice] = useState("");
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
@@ -152,6 +153,10 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", costPrice: "", stock: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
+  const voiceModeRef = useRef<"standby" | "active" | "sleeping">("sleeping");
+  const voiceStartedRef = useRef(false);
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const manualStopRef = useRef(false);
   const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
@@ -168,6 +173,9 @@ export default function Home() {
 
   useEffect(() => () => {
     if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
+    if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+    manualStopRef.current = true;
+    recognitionRef.current?.stop();
   }, []);
 
   const showCartNotice = (message: string) => {
@@ -549,29 +557,92 @@ export default function Home() {
     }
   };
 
-  const startListening = () => {
+  const setVoiceModeSafe = (mode: "standby" | "active" | "sleeping") => {
+    voiceModeRef.current = mode;
+    setVoiceMode(mode);
+  };
+
+  const keepConversationAlive = () => {
+    if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+    setVoiceModeSafe("active");
+    voiceTimerRef.current = setTimeout(() => {
+      setVoiceModeSafe("standby");
+      setStatus("idle");
+    }, 2 * 60 * 1000);
+  };
+
+  const startListening = (automatic = false) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast.info("Browser belum mendukung input suara", { description: "Gunakan kolom teks sebagai alternatif." });
+      if (!automatic) toast.info("Browser belum mendukung input suara", { description: "Gunakan kolom teks sebagai alternatif." });
+      setVoiceModeSafe("sleeping");
       document.getElementById("command-input")?.focus();
       return;
     }
-    if (status === "listening") { recognitionRef.current?.stop(); return; }
+    if (!automatic && voiceModeRef.current !== "sleeping") {
+      manualStopRef.current = true;
+      recognitionRef.current?.stop();
+      setVoiceModeSafe("sleeping");
+      setStatus("idle");
+      return;
+    }
+    manualStopRef.current = false;
     const recognition = new SpeechRecognition();
     recognition.lang = "id-ID";
     recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.onstart = () => setStatus("listening");
-    recognition.onresult = (event: any) => {
-      const text = Array.from(event.results).map((result: any) => result[0].transcript).join("");
-      setTranscript(text);
-      if (event.results[event.results.length - 1].isFinal) handleCommand(text);
+    recognition.continuous = true;
+    recognition.onstart = () => {
+      voiceStartedRef.current = true;
+      setStatus("listening");
+      if (voiceModeRef.current === "sleeping") setVoiceModeSafe("standby");
     };
-    recognition.onerror = () => { setStatus("idle"); toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." }); };
-    recognition.onend = () => setStatus(current => current === "listening" ? "idle" : current);
+    recognition.onresult = (event: any) => {
+      const latestResult = event.results[event.results.length - 1];
+      const text = latestResult?.[0]?.transcript ?? "";
+      setTranscript(text);
+      if (!latestResult?.isFinal) return;
+      const clean = text.trim();
+      const wakeWord = /\b(hallo|halo)\s+kasir\b/i.test(clean);
+      if (voiceModeRef.current === "standby" || voiceModeRef.current === "sleeping") {
+        if (!wakeWord) return;
+        keepConversationAlive();
+        setTranscript("");
+        speak("Halo, ada yang bisa saya bantu?");
+        return;
+      }
+      keepConversationAlive();
+      handleCommand(clean);
+    };
+    recognition.onerror = (event: any) => {
+      setStatus("idle");
+      if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+        setVoiceModeSafe("sleeping");
+        if (!automatic) toast.error("Izin mikrofon diperlukan", { description: "Izinkan akses mikrofon untuk memakai mode suara otomatis." });
+      } else if (!automatic) {
+        toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." });
+      }
+    };
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      if (manualStopRef.current || voiceModeRef.current === "sleeping") {
+        setStatus("idle");
+        return;
+      }
+      window.setTimeout(() => startListening(true), 250);
+    };
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      setVoiceModeSafe("sleeping");
+      setStatus("idle");
+    }
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => startListening(true), 500);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const confirmPending = () => {
     if (!pending) return;
@@ -694,7 +765,7 @@ export default function Home() {
             <div className="relative z-10 flex w-[44%] justify-between">
               {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${item.id === "produk" ? "-translate-x-[55px]" : ""} ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
             </div>
-            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
+            <button onClick={() => startListening()} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
               <span className="absolute inset-1 rounded-full border border-white/30" />
               {status === "listening" ? <div className="flex items-center gap-1"><span className="h-5 w-1 rounded-full bg-white animate-pulse" /><span className="h-8 w-1 rounded-full bg-white animate-pulse" /><span className="h-6 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={30} className="text-white" />}
             </button>
