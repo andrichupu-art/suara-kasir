@@ -74,6 +74,13 @@ const commandSchema = {
   additionalProperties: false,
 };
 
+class ProviderRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ProviderRequestError";
+  }
+}
+
 function promptFor(transcript: string, catalog: Array<{ name: string; price: number }>) {
   return `Kamu adalah mesin kasir Indonesia. Pahami bahasa percakapan, singkatan, salah ucap ringan, angka dalam kata (satu, dua, tiga), dan perintah seperti "tambah dua kopi", "masukin es teh satu", "sudah, bayar pakai QR", "hapus yang terakhir", atau "batalkan". Pahami juga permintaan "rekap transaksi hari ini", "omzet hari ini", dan "omzet tanggal 2026-09-10". Permintaan omzet diperlakukan sama seperti summary dan harus memakai action summary. Cocokkan nama barang hanya dari katalog. Jangan mengarang barang atau harga.\n\nKatalog: ${JSON.stringify(catalog)}\n\nUcapan kasir: ${transcript}\n\nKembalikan JSON sesuai schema. Untuk add_item, items berisi nama katalog dan quantity positif. Untuk checkout, items boleh kosong dan paymentMethod isi metode jika disebut. Untuk cancel, items boleh kosong. Untuk summary, summaryDate berisi tanggal YYYY-MM-DD jika tanggal disebut atau null untuk hari ini. reply harus singkat dalam Bahasa Indonesia, seolah berbicara ke kasir.`;
 }
@@ -84,11 +91,15 @@ async function callProvider(
 ) {
   const structuredOutput = options.structuredOutput ?? true;
   const prompt = promptFor(input.transcript, input.catalog);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
 
+  try {
   if (input.provider === "google") {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`;
     const response = await fetch(endpoint, {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-goog-api-key": input.apiKey,
@@ -103,7 +114,7 @@ async function callProvider(
       }),
     });
     const responseText = await response.text();
-    if (!response.ok) throw new Error(`Google Gemini menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`);
+    if (!response.ok) throw new ProviderRequestError(`Google Gemini menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`, response.status);
     let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     try {
       data = JSON.parse(responseText);
@@ -120,6 +131,7 @@ async function callProvider(
   } as const;
   const response = await fetch(endpoints[input.provider], {
     method: "POST",
+    signal: controller.signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${input.apiKey}`,
@@ -137,7 +149,7 @@ async function callProvider(
   });
   const responseText = await response.text();
   if (!response.ok) {
-    throw new Error(`${input.provider} menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`);
+    throw new ProviderRequestError(`${input.provider} menolak permintaan (${response.status})${responseText ? `: ${responseText.slice(0, 300)}` : "."}`, response.status);
   }
   let data: { choices?: Array<{ message?: { content?: string } }> };
   try {
@@ -146,6 +158,14 @@ async function callProvider(
     throw new Error(`${input.provider} mengembalikan respons bukan JSON: ${responseText.slice(0, 200)}`);
   }
   return data.choices?.[0]?.message?.content ?? "{}";
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`${input.provider} tidak merespons dalam 12 detik.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function parseJsonResponse(raw: unknown) {
@@ -211,9 +231,10 @@ export const appRouter = router({
       try {
         try {
           return normalizeCommand(await callProvider(input));
-        } catch {
+        } catch (error) {
           // Some valid provider/model combinations reject structured-output options.
           // Retry as plain text because the parser already validates the JSON payload.
+          if (!(error instanceof ProviderRequestError) || ![400, 422].includes(error.status)) throw error;
           return normalizeCommand(await callProvider(input, { structuredOutput: false }));
         }
       } catch (error) {
