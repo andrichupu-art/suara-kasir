@@ -22,7 +22,6 @@ import {
   Trash2,
   Volume2,
   X,
-  Zap,
 } from "lucide-react";
 
 type Product = { id: string; name: string; price: number; stock: number; category: string; color: string };
@@ -534,8 +533,6 @@ export default function Home() {
 
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
-              <section className="relative overflow-hidden rounded-[2rem] bg-slate-900 p-6 text-white shadow-xl shadow-slate-200 sm:p-8"><div className="relative z-[1] max-w-xl"><div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300"><Zap size={14} />Voice-first POS</div><h2 className="text-3xl font-black leading-tight sm:text-4xl">Tinggal bilang,<br /><span className="text-emerald-300">langsung beres.</span></h2><p className="mt-4 max-w-md text-sm leading-6 text-slate-300">"Tambahkan dua kopi susu dan satu es teh."<br />SuaraKasir akan menyiapkan transaksi untuk kamu konfirmasi.</p></div><div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-[30px] border-emerald-400/10" /><div className="absolute -bottom-20 right-16 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl" /></section>
-
               <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
                 <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-600" />Input suara</div><p className="mt-1 text-xs text-slate-400">Tekan tombol, lalu bicara seperti biasa</p></div><div className={`rounded-full px-3 py-1 text-[11px] font-bold ${status === "listening" ? "bg-rose-100 text-rose-600" : status === "thinking" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{status === "listening" ? "Mendengarkan" : status === "thinking" ? "Memahami…" : "Siap"}</div></div>
                   <button onClick={startListening} className={`group relative mx-auto grid h-36 w-36 place-items-center rounded-full border-[12px] transition sm:h-44 sm:w-44 ${status === "listening" ? "border-rose-100 bg-rose-500 shadow-2xl shadow-rose-200" : "border-emerald-100 bg-emerald-500 shadow-2xl shadow-emerald-100 hover:scale-[1.03]"}`}><div className="absolute inset-3 rounded-full border border-white/30" />{status === "listening" ? <div className="flex items-center gap-1"><span className="h-6 w-1 rounded-full bg-white animate-pulse" /><span className="h-10 w-1 rounded-full bg-white animate-pulse" /><span className="h-7 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={42} className="text-white" />}</button>
