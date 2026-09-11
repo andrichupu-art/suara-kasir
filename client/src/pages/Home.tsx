@@ -131,6 +131,23 @@ function numberFromText(text: string) {
   if (value) return /^\d+$/.test(value) ? Number(value) : numbers[value];
   return 1;
 }
+
+function priceFromText(text: string) {
+  const normalized = text.toLowerCase().replace(/\brp\.?\s*/g, "").replace(/\s+rupiah\b/g, "").trim();
+  const numeric = normalized.match(/\b\d[\d.]*(?:,\d+)?\b/);
+  if (numeric) {
+    const digits = numeric[0].replace(/\./g, "").replace(/,\d+$/, "");
+    const value = Number(digits);
+    if (Number.isFinite(value)) return value;
+  }
+  const words: Record<string, number> = { satu: 1, dua: 2, tiga: 3, empat: 4, lima: 5, enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10 };
+  const word = Object.keys(words).find(item => new RegExp(`\\b${item}\\b`).test(normalized));
+  if (!word) return null;
+  const base = words[word];
+  if (/\b(juta|jutaan)\b/.test(normalized)) return base * 1_000_000;
+  if (/\b(ribu|ribuan)\b/.test(normalized)) return base * 1_000;
+  return base;
+}
 const normalizedProductName = (name: string) => name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 export default function Home() {
@@ -611,9 +628,9 @@ export default function Home() {
     const clean = text.trim();
     if (!clean) return;
     if (stockDraft) {
-      const value = numberFromText(clean);
+      const value = priceFromText(clean);
       const product = products.find(item => item.id === stockDraft.productId);
-      if (!product || !Number.isFinite(value) || value < 0) {
+      if (!product || value === null || !Number.isInteger(value) || value < 0) {
         speak("Mohon sebutkan harga dalam angka.");
         return;
       }
