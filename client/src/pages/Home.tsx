@@ -127,7 +127,6 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voiceMode, setVoiceMode] = useState<"standby" | "active" | "sleeping">("sleeping");
   const [lastHeard, setLastHeard] = useState("");
   const [cartNotice, setCartNotice] = useState("");
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
@@ -153,13 +152,6 @@ export default function Home() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", price: "", costPrice: "", stock: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
-  const voiceModeRef = useRef<"standby" | "active" | "sleeping">("sleeping");
-  const voiceStartedRef = useRef(false);
-  const speakingRef = useRef(false);
-  const restartAfterSpeechRef = useRef(false);
-  const commandInProgressRef = useRef(false);
-  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const manualStopRef = useRef(false);
   const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
   const parseCommand = trpc.ai.parseCommand.useMutation();
@@ -169,30 +161,13 @@ export default function Home() {
   const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
-    const handleSpeaking = (event: Event) => {
-      const speaking = (event as CustomEvent<boolean>).detail;
-      speakingRef.current = speaking;
-      setIsSpeaking(speaking);
-      if (speaking) {
-        restartAfterSpeechRef.current = true;
-        recognitionRef.current?.stop();
-      } else {
-        commandInProgressRef.current = false;
-      }
-      if (!speaking && restartAfterSpeechRef.current && !manualStopRef.current && voiceModeRef.current !== "sleeping") {
-        restartAfterSpeechRef.current = false;
-        startListening(true);
-      }
-    };
+    const handleSpeaking = (event: Event) => setIsSpeaking((event as CustomEvent<boolean>).detail);
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
   }, []);
 
   useEffect(() => () => {
     if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
-    if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
-    manualStopRef.current = true;
-    recognitionRef.current?.stop();
   }, []);
 
   const showCartNotice = (message: string) => {
@@ -525,7 +500,6 @@ export default function Home() {
         toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
       }
     } finally {
-      commandInProgressRef.current = false;
       setStatus("idle");
       setTranscript("");
     }
@@ -575,100 +549,29 @@ export default function Home() {
     }
   };
 
-  const setVoiceModeSafe = (mode: "standby" | "active" | "sleeping") => {
-    voiceModeRef.current = mode;
-    setVoiceMode(mode);
-  };
-
-  const keepConversationAlive = () => {
-    if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
-    setVoiceModeSafe("active");
-    voiceTimerRef.current = setTimeout(() => {
-      setVoiceModeSafe("standby");
-      setStatus("idle");
-    }, 2 * 60 * 1000);
-  };
-
-  const startListening = (automatic = false) => {
+  const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      if (!automatic) toast.info("Browser belum mendukung input suara", { description: "Gunakan kolom teks sebagai alternatif." });
-      setVoiceModeSafe("sleeping");
+      toast.info("Browser belum mendukung input suara", { description: "Gunakan kolom teks sebagai alternatif." });
       document.getElementById("command-input")?.focus();
       return;
     }
-    if (!automatic && voiceModeRef.current !== "sleeping") {
-      manualStopRef.current = true;
-      recognitionRef.current?.stop();
-      setVoiceModeSafe("sleeping");
-      setStatus("idle");
-      return;
-    }
-    manualStopRef.current = false;
+    if (status === "listening") { recognitionRef.current?.stop(); return; }
     const recognition = new SpeechRecognition();
     recognition.lang = "id-ID";
     recognition.interimResults = true;
-    recognition.continuous = true;
-    recognition.onstart = () => {
-      voiceStartedRef.current = true;
-      setStatus("listening");
-      if (voiceModeRef.current === "sleeping") setVoiceModeSafe("standby");
-    };
+    recognition.continuous = false;
+    recognition.onstart = () => setStatus("listening");
     recognition.onresult = (event: any) => {
-      if (speakingRef.current || commandInProgressRef.current) return;
-      const latestResult = event.results[event.results.length - 1];
-      const text = latestResult?.[0]?.transcript ?? "";
+      const text = Array.from(event.results).map((result: any) => result[0].transcript).join("");
       setTranscript(text);
-      if (!latestResult?.isFinal) return;
-      const clean = text.trim();
-      const wakeWord = /\b(hallo|halo)\s+kasir\b/i.test(clean);
-      if (voiceModeRef.current === "standby" || voiceModeRef.current === "sleeping") {
-        if (!wakeWord) return;
-        commandInProgressRef.current = true;
-        keepConversationAlive();
-        setTranscript("");
-        speak("Halo, ada yang bisa saya bantu?");
-        return;
-      }
-      commandInProgressRef.current = true;
-      keepConversationAlive();
-      handleCommand(clean);
+      if (event.results[event.results.length - 1].isFinal) handleCommand(text);
     };
-    recognition.onerror = (event: any) => {
-      setStatus("idle");
-      if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
-        setVoiceModeSafe("sleeping");
-        if (!automatic) toast.error("Izin mikrofon diperlukan", { description: "Izinkan akses mikrofon untuk memakai mode suara otomatis." });
-      } else if (!automatic) {
-        toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." });
-      }
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      if (manualStopRef.current || voiceModeRef.current === "sleeping") {
-        setStatus("idle");
-        return;
-      }
-      if (speakingRef.current) {
-        restartAfterSpeechRef.current = true;
-        setStatus("idle");
-        return;
-      }
-      window.setTimeout(() => startListening(true), 250);
-    };
+    recognition.onerror = () => { setStatus("idle"); toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." }); };
+    recognition.onend = () => setStatus(current => current === "listening" ? "idle" : current);
     recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch {
-      setVoiceModeSafe("sleeping");
-      setStatus("idle");
-    }
+    recognition.start();
   };
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => startListening(true), 500);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   const confirmPending = () => {
     if (!pending) return;
@@ -764,8 +667,8 @@ export default function Home() {
                 <div className="rounded-2xl border border-slate-100">
                   <table className="w-full table-fixed text-left text-[11px]">
                     <colgroup><col className="w-[36%]" /><col className="w-[23%]" /><col className="w-[23%]" /><col className="w-[13%]" /><col className="w-[5%]" /></colgroup>
-                    <thead className="bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500"><tr><th className="px-1.5 py-2 text-left font-bold">Produk</th><th className="px-1.5 py-2 text-center font-bold">Jual</th><th className="px-1.5 py-2 text-center font-bold">Modal</th><th className="px-1.5 py-2 text-center font-bold">Qty</th><th className="px-1 py-2" /></tr></thead>
-                    <tbody>{products.map(product => <tr key={product.id} className="border-t border-slate-100"><td className="px-1.5 py-2 text-left"><span className="block truncate font-bold">{product.name}</span></td><td className="px-1.5 py-2 text-center"><input type="number" min="0" value={product.price} onChange={event => updateProduct(product.id, "price", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 text-center font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2 text-center"><input type="number" min="0" value={product.costPrice} onChange={event => updateProduct(product.id, "costPrice", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 text-center font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2 text-center"><input type="number" min="0" step="1" value={product.stock} onChange={event => updateProduct(product.id, "stock", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 text-center font-semibold outline-none focus:ring-0" /></td><td className="px-1 py-2 text-right">{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Hapus ${product.name}`}><Trash2 size={14} /></button>}</td></tr>)}</tbody>
+                    <thead className="bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500"><tr><th className="px-1.5 py-2 font-bold">Produk</th><th className="px-1.5 py-2 font-bold">Jual</th><th className="px-1.5 py-2 font-bold">Modal</th><th className="px-1.5 py-2 font-bold">Qty</th><th className="px-1 py-2" /></tr></thead>
+                    <tbody>{products.map(product => <tr key={product.id} className="border-t border-slate-100"><td className="px-1.5 py-2"><span className="block truncate font-bold">{product.name}</span></td><td className="px-1.5 py-2"><input type="number" min="0" value={product.price} onChange={event => updateProduct(product.id, "price", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2"><input type="number" min="0" value={product.costPrice} onChange={event => updateProduct(product.id, "costPrice", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2"><input type="number" min="0" step="1" value={product.stock} onChange={event => updateProduct(product.id, "stock", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1 py-2 text-right">{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Hapus ${product.name}`}><Trash2 size={14} /></button>}</td></tr>)}</tbody>
                   </table>
                 </div>
               </div>
@@ -791,7 +694,7 @@ export default function Home() {
             <div className="relative z-10 flex w-[44%] justify-between">
               {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${item.id === "produk" ? "-translate-x-[55px]" : ""} ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
             </div>
-            <button onClick={() => startListening()} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
+            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
               <span className="absolute inset-1 rounded-full border border-white/30" />
               {status === "listening" ? <div className="flex items-center gap-1"><span className="h-5 w-1 rounded-full bg-white animate-pulse" /><span className="h-8 w-1 rounded-full bg-white animate-pulse" /><span className="h-6 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={30} className="text-white" />}
             </button>
