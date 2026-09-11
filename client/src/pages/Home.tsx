@@ -5,7 +5,6 @@ import {
   Archive,
   ArrowRight,
   Check,
-  ChevronRight,
   CircleHelp,
   Link2,
   History,
@@ -22,7 +21,6 @@ import {
   Trash2,
   Volume2,
   X,
-  Zap,
 } from "lucide-react";
 
 type Product = { id: string; name: string; price: number; stock: number; category: string; color: string };
@@ -71,6 +69,7 @@ const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", in
 function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: true }));
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "id-ID";
     utterance.rate = 0.96;
@@ -79,6 +78,8 @@ function speak(text: string) {
     const indonesianVoice = voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
       ?? voices.find(voice => voice.lang.toLowerCase().startsWith("id"));
     if (indonesianVoice) utterance.voice = indonesianVoice;
+    utterance.onend = () => window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: false }));
+    utterance.onerror = () => window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: false }));
     window.speechSynthesis.speak(utterance);
   }
 }
@@ -118,6 +119,7 @@ export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastHeard, setLastHeard] = useState("");
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
@@ -148,6 +150,12 @@ export default function Home() {
   const migrateStore = trpc.store.migrate.useMutation();
   const cloudSyncAttempted = useRef(false);
   const [cloudReady, setCloudReady] = useState(false);
+
+  useEffect(() => {
+    const handleSpeaking = (event: Event) => setIsSpeaking((event as CustomEvent<boolean>).detail);
+    window.addEventListener("suara-kasir:speaking", handleSpeaking);
+    return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("suara-kasir-products", JSON.stringify(products));
@@ -527,30 +535,28 @@ export default function Home() {
         </aside>
 
         <main className="min-w-0 flex-1 pb-24 lg:pb-8">
-          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/80 bg-[#f7f8fa]/90 px-5 py-5 backdrop-blur lg:px-10">
-            <div><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{activeTab === "kasir" ? "Hari ini" : "Kelola toko"}</div><h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">{activeTab === "kasir" ? "Halo, Kasir." : nav.find(item => item.id === activeTab)?.label}</h1></div>
-            <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-500" />Siap melayani</div><button onClick={() => setActiveTab("pengaturan")} className="grid h-11 w-11 place-items-center rounded-2xl bg-white text-slate-600 shadow-sm hover:bg-slate-900 hover:text-white"><Settings2 size={19} /></button></div>
-          </header>
-
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
-              <section className="relative overflow-hidden rounded-[2rem] bg-slate-900 p-6 text-white shadow-xl shadow-slate-200 sm:p-8"><div className="relative z-[1] max-w-xl"><div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-300"><Zap size={14} />Voice-first POS</div><h2 className="text-3xl font-black leading-tight sm:text-4xl">Tinggal bilang,<br /><span className="text-emerald-300">langsung beres.</span></h2><p className="mt-4 max-w-md text-sm leading-6 text-slate-300">"Tambahkan dua kopi susu dan satu es teh."<br />SuaraKasir akan menyiapkan transaksi untuk kamu konfirmasi.</p></div><div className="absolute -right-16 -top-24 h-72 w-72 rounded-full border-[30px] border-emerald-400/10" /><div className="absolute -bottom-20 right-16 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl" /></section>
+              <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-6"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
+              <div className="flex h-20 items-center justify-center sm:h-28" aria-live="polite">
+                {isSpeaking && <div className="flex h-12 items-center gap-1.5" aria-label="Aplikasi sedang berbicara">
+                  {[3, 6, 10, 16, 12, 8, 14, 6, 3].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ height: `${height * 3}px`, animationDelay: `${index * 90}ms` }} />)}
+                </div>}
+              </div>
 
               <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-600" />Input suara</div><p className="mt-1 text-xs text-slate-400">Tekan tombol, lalu bicara seperti biasa</p></div><div className={`rounded-full px-3 py-1 text-[11px] font-bold ${status === "listening" ? "bg-rose-100 text-rose-600" : status === "thinking" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{status === "listening" ? "Mendengarkan" : status === "thinking" ? "Memahami…" : "Siap"}</div></div>
+                <div className="p-5 sm:p-6">
                   <button onClick={startListening} className={`group relative mx-auto grid h-36 w-36 place-items-center rounded-full border-[12px] transition sm:h-44 sm:w-44 ${status === "listening" ? "border-rose-100 bg-rose-500 shadow-2xl shadow-rose-200" : "border-emerald-100 bg-emerald-500 shadow-2xl shadow-emerald-100 hover:scale-[1.03]"}`}><div className="absolute inset-3 rounded-full border border-white/30" />{status === "listening" ? <div className="flex items-center gap-1"><span className="h-6 w-1 rounded-full bg-white animate-pulse" /><span className="h-10 w-1 rounded-full bg-white animate-pulse" /><span className="h-7 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={42} className="text-white" />}</button>
                   <p className="mt-4 text-center text-sm font-bold text-slate-600">{status === "listening" ? "Silakan bicara…" : "Ketuk untuk bicara"}</p>
-                  <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="mt-5 flex gap-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Atau ketik perintah di sini…" className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
                   {lastHeard && <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500"><Volume2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Terakhir: "{lastHeard}"</span></div>}
                 </div>
 
-                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-center justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><ReceiptText size={17} className="text-violet-600" />Pesanan berjalan</div><p className="mt-1 text-xs text-slate-400">{itemCount ? `${itemCount} item di keranjang` : "Belum ada pesanan"}</p></div>{cart.length > 0 && <button onClick={() => setCart([])} className="text-xs font-bold text-slate-400 hover:text-rose-500">Kosongkan</button>}</div>
-                  <div className="min-h-[185px]">{cart.length === 0 ? <div className="grid min-h-[185px] place-items-center rounded-3xl border border-dashed border-slate-200 text-center"><div><ShoppingBasket className="mx-auto mb-3 text-slate-300" size={30} /><p className="text-sm font-bold text-slate-400">Keranjang masih kosong</p><p className="mt-1 text-xs text-slate-400">Coba bilang "tambah kopi susu"</p></div></div> : <div className="space-y-3">{cart.map(item => <div key={item.id} className="flex items-center gap-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>}</div>
+                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6">
+                  {cart.length > 0 && <div className="space-y-3">{cart.map(item => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>}
                   <div className="mt-5 border-t border-slate-100 pt-5"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
                 </div>
               </section>
 
-              <section className="mt-6"><div className="mb-4 flex items-end justify-between"><div><h3 className="text-lg font-black tracking-tight">Tambah cepat</h3><p className="text-xs text-slate-400">Tap produk atau sebutkan lewat suara</p></div><button onClick={() => setActiveTab("produk")} className="flex items-center gap-1 text-xs font-bold text-emerald-700">Semua produk <ChevronRight size={15} /></button></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">{products.slice(0, 6).map(product => <button key={product.id} onClick={() => { if (addProduct(product)) toast.success(`${product.name} ditambahkan`); }} className={`group rounded-3xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-md ${product.stock <= 0 ? "opacity-60" : ""}`}><div className={`mb-3 grid aspect-[1.25] place-items-center rounded-2xl bg-gradient-to-br ${product.color}`}><span className="text-2xl font-black text-slate-600/60">{product.name.charAt(0)}</span></div><div className="truncate text-xs font-bold">{product.name}</div><div className="mt-1 text-xs font-semibold text-emerald-700">{product.stock <= 0 ? "Stok habis" : `${currency(product.price)} · Stok ${product.stock}`}</div></button>)}</div></section>
             </>}
 
             {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div><div className="space-y-4"><label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Harga<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })}             placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Stok<input type="number" min="0" step="1" value={newProduct.stock} onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })} placeholder="Contoh: 20" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label><button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button></div></div><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div><div className="grid gap-3 sm:grid-cols-2">{products.map(product => <div key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${product.color}`}><span className="font-black text-slate-500">{product.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{product.name}</div>            <div className="text-xs text-slate-400">{product.category} · {currency(product.price)} · Stok {product.stock}</div></div>{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16} /></button>}</div>)}</div></div></section>}
