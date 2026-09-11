@@ -489,6 +489,19 @@ export default function Home() {
   const handleCommand = async (text: string) => {
     const clean = text.trim();
     if (!clean) return;
+    if (pending && /^(ya|iya|oke|ok|simpan|lanjutkan|benar)(\s+(simpan|lanjutkan|transaksi))?[.!]?$/i.test(clean)) {
+      confirmPending();
+      setStatus("idle");
+      setTranscript("");
+      return;
+    }
+    if (pending && /^(tidak|nggak|enggak|batal|batalkan|belum)[.!]?$/i.test(clean)) {
+      setPending(null);
+      speak("Baik, transaksi dibatalkan.");
+      setStatus("idle");
+      setTranscript("");
+      return;
+    }
     const savedApiKey = apiKey.trim();
     const localCommand = parseLocal(clean);
     setLastHeard(clean);
