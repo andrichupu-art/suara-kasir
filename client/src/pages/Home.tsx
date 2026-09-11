@@ -606,14 +606,14 @@ export default function Home() {
         <nav className="fixed bottom-3 left-1/2 z-20 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 lg:hidden">
           <div className="relative flex h-[74px] items-center justify-between rounded-[2rem] border border-slate-100 bg-white/95 px-6 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur">
             <div className="pointer-events-none absolute left-1/2 top-0 h-[64px] w-[132px] -translate-x-1/2 rounded-b-[66px] bg-[#f7f8fa]" />
-            <div className="relative z-10 flex w-[42%] justify-between">
+            <div className="relative z-10 flex w-[38%] justify-between">
               {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
             </div>
             <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
               <span className="absolute inset-1 rounded-full border border-white/30" />
               {status === "listening" ? <div className="flex items-center gap-1"><span className="h-5 w-1 rounded-full bg-white animate-pulse" /><span className="h-8 w-1 rounded-full bg-white animate-pulse" /><span className="h-6 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={30} className="text-white" />}
             </button>
-            <div className="relative z-10 flex w-[42%] justify-between">
+            <div className="relative z-10 flex w-[38%] justify-between">
               {nav.slice(2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
             </div>
           </div>
