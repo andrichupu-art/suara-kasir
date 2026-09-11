@@ -110,6 +110,7 @@ function numberFromText(text: string) {
   for (const [word, value] of Object.entries(numbers)) if (text.toLowerCase().includes(word)) return value;
   return 1;
 }
+const normalizedProductName = (name: string) => name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"kasir" | "produk" | "riwayat" | "pengaturan">("kasir");
@@ -312,6 +313,20 @@ export default function Home() {
     if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(simpan|bayar|checkout|selesai|sudah)/.test(lower) && cart.length) return { type: "checkout" as const, payment: /(qris|qr|scan)/.test(lower) ? "qr" : /(debit|kartu)/.test(lower) ? "debit" : "cash", reply: "Siap, saya siapkan konfirmasinya." };
+    const matches = products
+      .map(product => ({ product, position: lower.indexOf(normalizedProductName(product.name)) }))
+      .filter(match => match.position >= 0)
+      .sort((a, b) => a.position - b.position);
+    if (matches.length > 1) {
+      return {
+        type: "add" as const,
+        items: matches.map((match, index) => ({
+          name: match.product.name,
+          quantity: numberFromText(lower.slice(index ? matches[index - 1].position : 0, match.position)),
+        })),
+        reply: `${matches.length} barang masuk keranjang.`,
+      };
+    }
     const product = findProduct(products, lower);
     if (product) return { type: "add" as const, items: [{ name: product.name, quantity: numberFromText(lower) }], reply: `${numberFromText(lower)} ${product.name} masuk keranjang.` };
     return { type: "unknown" as const, reply: "Saya belum menemukan barangnya. Coba sebut nama produk dan jumlahnya." };
