@@ -30,7 +30,7 @@
 }
 
 :root {
-  --primary: oklch(0.3 0.035 252);
+  --primary: oklch(0.52 0.15 161);
   --primary-foreground: oklch(0.98 0.01 250);
   --radius: 0.9rem;
   --background: oklch(0.975 0.006 250);
@@ -98,6 +98,9 @@
 @layer components {
   .container { width: 100%; margin-left: auto; margin-right: auto; padding-left: 1rem; padding-right: 1rem; }
   .flex { min-height: 0; min-width: 0; }
+  button.bg-slate-900 { background-color: rgb(5 150 105); }
+  button.bg-slate-900:hover { background-color: rgb(4 120 87); }
+  button[class~="hover:bg-slate-900"]:hover { background-color: rgb(5 150 105); }
   @media (min-width: 640px) { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
   @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }
 }
