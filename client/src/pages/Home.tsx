@@ -157,6 +157,7 @@ export default function Home() {
   const voiceStartedRef = useRef(false);
   const speakingRef = useRef(false);
   const restartAfterSpeechRef = useRef(false);
+  const commandInProgressRef = useRef(false);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualStopRef = useRef(false);
   const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -172,6 +173,12 @@ export default function Home() {
       const speaking = (event as CustomEvent<boolean>).detail;
       speakingRef.current = speaking;
       setIsSpeaking(speaking);
+      if (speaking) {
+        restartAfterSpeechRef.current = true;
+        recognitionRef.current?.stop();
+      } else {
+        commandInProgressRef.current = false;
+      }
       if (!speaking && restartAfterSpeechRef.current && !manualStopRef.current && voiceModeRef.current !== "sleeping") {
         restartAfterSpeechRef.current = false;
         startListening(true);
@@ -518,6 +525,7 @@ export default function Home() {
         toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
       }
     } finally {
+      commandInProgressRef.current = false;
       setStatus("idle");
       setTranscript("");
     }
@@ -607,7 +615,7 @@ export default function Home() {
       if (voiceModeRef.current === "sleeping") setVoiceModeSafe("standby");
     };
     recognition.onresult = (event: any) => {
-      if (speakingRef.current) return;
+      if (speakingRef.current || commandInProgressRef.current) return;
       const latestResult = event.results[event.results.length - 1];
       const text = latestResult?.[0]?.transcript ?? "";
       setTranscript(text);
@@ -616,11 +624,13 @@ export default function Home() {
       const wakeWord = /\b(hallo|halo)\s+kasir\b/i.test(clean);
       if (voiceModeRef.current === "standby" || voiceModeRef.current === "sleeping") {
         if (!wakeWord) return;
+        commandInProgressRef.current = true;
         keepConversationAlive();
         setTranscript("");
         speak("Halo, ada yang bisa saya bantu?");
         return;
       }
+      commandInProgressRef.current = true;
       keepConversationAlive();
       handleCommand(clean);
     };
