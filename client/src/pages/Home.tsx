@@ -53,6 +53,12 @@ const localDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 const dateFromText = (text: string) => {
+  const dayOnly = text.match(/\btanggal\s+(\d{1,2})\b/i);
+  if (dayOnly) {
+    const now = new Date();
+    const day = Number(dayOnly[1]);
+    if (day >= 1 && day <= 31) return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   const iso = text.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
   const numeric = text.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](20\d{2})\b/);
