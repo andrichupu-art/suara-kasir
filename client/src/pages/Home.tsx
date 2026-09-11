@@ -69,6 +69,7 @@ const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", in
 function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
+    window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: true }));
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "id-ID";
     utterance.rate = 0.96;
@@ -77,6 +78,8 @@ function speak(text: string) {
     const indonesianVoice = voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
       ?? voices.find(voice => voice.lang.toLowerCase().startsWith("id"));
     if (indonesianVoice) utterance.voice = indonesianVoice;
+    utterance.onend = () => window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: false }));
+    utterance.onerror = () => window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: false }));
     window.speechSynthesis.speak(utterance);
   }
 }
@@ -116,6 +119,7 @@ export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<"idle" | "listening" | "thinking">("idle");
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastHeard, setLastHeard] = useState("");
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
@@ -146,6 +150,12 @@ export default function Home() {
   const migrateStore = trpc.store.migrate.useMutation();
   const cloudSyncAttempted = useRef(false);
   const [cloudReady, setCloudReady] = useState(false);
+
+  useEffect(() => {
+    const handleSpeaking = (event: Event) => setIsSpeaking((event as CustomEvent<boolean>).detail);
+    window.addEventListener("suara-kasir:speaking", handleSpeaking);
+    return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("suara-kasir-products", JSON.stringify(products));
@@ -528,7 +538,11 @@ export default function Home() {
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
               <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-6"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
-              <div className="h-20 sm:h-28" aria-hidden="true" />
+              <div className="flex h-20 items-center justify-center sm:h-28" aria-live="polite">
+                {isSpeaking && <div className="flex h-12 items-center gap-1.5" aria-label="Aplikasi sedang berbicara">
+                  {[3, 6, 10, 16, 12, 8, 14, 6, 3].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-emerald-400 animate-pulse" style={{ height: `${height * 3}px`, animationDelay: `${index * 90}ms` }} />)}
+                </div>}
+              </div>
 
               <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
                 <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6"><div className="mb-5 flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm font-bold"><Mic size={17} className="text-emerald-600" />Input suara</div><p className="mt-1 text-xs text-slate-400">Tekan tombol, lalu bicara seperti biasa</p></div><div className={`rounded-full px-3 py-1 text-[11px] font-bold ${status === "listening" ? "bg-rose-100 text-rose-600" : status === "thinking" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{status === "listening" ? "Mendengarkan" : status === "thinking" ? "Memahami…" : "Siap"}</div></div>
