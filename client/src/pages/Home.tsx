@@ -333,6 +333,12 @@ export default function Home() {
 
   const removeProduct = (id: string) => setCart(current => current.flatMap(item => item.id === id ? (item.quantity > 1 ? [{ ...item, quantity: item.quantity - 1 }] : []) : [item]));
   const removeCartItem = (id: string) => setCart(current => current.filter(item => item.id !== id));
+  const setProductQuantity = (id: string, quantity: number) => setCart(current => current.flatMap(item => {
+    if (item.id !== id) return [item];
+    if (quantity <= 0) return [];
+    const product = products.find(entry => entry.id === id);
+    return product && quantity <= product.stock ? [{ ...item, quantity }] : [item];
+  }));
 
   const finishTransaction = (method = payment) => {
     if (!cart.length) return;
@@ -374,6 +380,16 @@ export default function Home() {
       return { type: "cancel" as const, reply: "Keranjang akan dikosongkan. Apakah Anda yakin?" };
     }
     if (/(batalkan|batal|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
+    if (cart.length && /^(tambah|tambahkan|masukkan)\s+(satu|1)\s+lagi$/.test(lower)) {
+      return { type: "add" as const, items: [{ name: cart[0].name, quantity: 1 }], reply: `Satu ${cart[0].name} lagi ditambahkan.` };
+    }
+    if (cart.length && /^(kurangi|kurang|ambil)\s+(satu|1)(\s+(item|buah))?$/.test(lower)) {
+      return { type: "remove" as const, items: [{ name: cart[0].name, quantity: 1 }], reply: `Satu ${cart[0].name} dikurangi.` };
+    }
+    if (cart.length && /^(yang ini|ini)\s+(jadi|menjadi)\s+/.test(lower)) {
+      const quantity = numberFromText(lower);
+      return { type: "set_quantity" as const, name: cart[0].name, quantity, reply: `${cart[0].name} diubah menjadi ${quantity}.` };
+    }
     if (/(hapus|buang|hilangkan)/.test(lower)) {
       const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
       const product = target && findProduct(products, target);
@@ -463,6 +479,17 @@ export default function Home() {
         speak(message);
         toast.error(message);
       }
+    } else if (command.type === "set_quantity") {
+      const product = findProduct(products, String(command.name ?? ""));
+      const item = product && cart.find(cartItem => cartItem.id === product.id);
+      if (!item) {
+        speak("Barang yang dimaksud belum ada di keranjang.");
+        return;
+      }
+      setProductQuantity(item.id, Number(command.quantity));
+      setLastHeard(command.reply);
+      speak(command.reply);
+      showCartNotice("Jumlah barang diperbarui");
     } else if (command.action === "add_item" || command.type === "add") {
       const items: Array<{ name?: unknown; quantity?: unknown }> = Array.isArray(command.items) ? command.items : [];
       let addedItems = 0;
