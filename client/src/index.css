@@ -85,7 +85,7 @@
     z-index: 0;
     pointer-events: none;
     background: url("/bg-market.png") center / 320px auto repeat;
-    opacity: 0.2;
+    opacity: 0.12;
   }
   #root {
     position: relative;
