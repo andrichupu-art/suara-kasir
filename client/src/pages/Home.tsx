@@ -604,7 +604,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="suara-kasir-app min-h-screen bg-[#f7f8fa] text-slate-900">
+    <div className="min-h-screen bg-[#f7f8fa] text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row">
         <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-5 py-7 lg:flex lg:flex-col">
           <div className="mb-12 flex items-center gap-3 px-2"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-900 text-white"><Mic2 size={20} /></div><div><div className="font-extrabold tracking-tight">SuaraKasir</div><div className="text-xs text-slate-400">Kasir tanpa ribet</div></div></div>
