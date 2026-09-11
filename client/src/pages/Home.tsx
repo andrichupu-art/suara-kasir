@@ -28,6 +28,7 @@ type CartItem = Product & { quantity: number };
 type Transaction = { id: string; createdAt: string; items: CartItem[]; total: number; payment: string };
 type Provider = "google" | "groq" | "openrouter" | "cerebras";
 type ConversationTurn = { user: string; assistant: string };
+type StockDraft = { productId: string; quantity: number; additive: boolean; costPrice?: number };
 
 const initialProducts: Product[] = [
   { id: "kopi-susu", name: "Kopi Susu", price: 18000, costPrice: 10000, stock: 100, category: "Minuman", color: "from-amber-100 to-orange-50" },
@@ -144,6 +145,7 @@ export default function Home() {
   const [lastHeard, setLastHeard] = useState("");
   const [cartNotice, setCartNotice] = useState("");
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
+  const [stockDraft, setStockDraft] = useState<StockDraft | null>(null);
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
   const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
@@ -199,8 +201,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (pending && !isSpeaking && status === "idle") startListening();
-  }, [isSpeaking, pending, status]);
+    if ((pending || stockDraft) && !isSpeaking && status === "idle") startListening();
+  }, [isSpeaking, pending, stockDraft, status]);
 
   useEffect(() => () => {
     if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
@@ -373,6 +375,29 @@ export default function Home() {
 
   const parseLocal = (text: string) => {
     const lower = text.toLowerCase();
+    const navigation = lower.match(/(?:buka|pindah|masuk|ke|lihat|tampilkan)\s+(?:tab\s+)?(kasir|transaksi|produk|riwayat|pengaturan|setting)/);
+    if (navigation) {
+      const tab = (navigation[1] === "transaksi" ? "kasir" : navigation[1] === "setting" ? "pengaturan" : navigation[1]) as "kasir" | "produk" | "riwayat" | "pengaturan";
+      const labels = { kasir: "Kasir", produk: "Produk", riwayat: "Riwayat", pengaturan: "Pengaturan" } as const;
+      return { type: "navigate" as const, tab, reply: `Membuka tab ${labels[tab]}.` };
+    }
+    const stockUpdate = lower.match(/^(?:(?:stok)\s+(.+?)|(?:tambah|isi|masukkan|input|atur|ubah|set)\s+(?:stok\s+)?(.+?))(?:\s+(?:jadi|menjadi|sebanyak|sejumlah))?\s+(\d+)$/);
+    if (stockUpdate) {
+      const product = findProduct(products, stockUpdate[1] ?? stockUpdate[2] ?? "");
+      if (product) {
+        const quantity = Number(stockUpdate[3]);
+        const additive = /^(?:tambah|isi|masukkan)\b/.test(lower);
+        return {
+          type: "stock_update" as const,
+          name: product.name,
+          quantity,
+          additive,
+          reply: additive
+            ? `Stok ${product.name} akan ditambah ${quantity}.`
+            : `Stok ${product.name} akan diatur menjadi ${quantity}.`,
+        };
+      }
+    }
     if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
     if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
     if (/(rekap|ringkasan|laporan|omzet|omset|pendapatan(?:\s+penjualan)?)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
@@ -456,7 +481,29 @@ export default function Home() {
   };
 
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.action === "stock_low" || command.type === "stock_low") {
+    if (command.type === "navigate") {
+      const tab = command.tab as "kasir" | "produk" | "riwayat" | "pengaturan";
+      setReportDate(null);
+      setActiveTab(tab);
+      setLastHeard(command.reply);
+      speak(command.reply);
+    } else if (command.type === "stock_update") {
+      const product = findProduct(products, String(command.name ?? ""));
+      if (!product) {
+        speak("Produk yang dimaksud tidak ditemukan.");
+        return;
+      }
+      const requestedStock = Number(command.quantity);
+      const nextStock = command.additive ? product.stock + requestedStock : requestedStock;
+      if (!Number.isInteger(requestedStock) || requestedStock < 0 || nextStock < 0) {
+        speak("Jumlah stok harus berupa angka nol atau lebih.");
+        return;
+      }
+      setStockDraft({ productId: product.id, quantity: requestedStock, additive: command.additive });
+      const reply = `Berapa harga beli ${product.name}?`;
+      setLastHeard(reply);
+      speak(reply);
+    } else if (command.action === "stock_low" || command.type === "stock_low") {
       showStockReport("low");
     } else if (command.action === "stock_safe" || command.type === "stock_safe") {
       showStockReport("safe");
@@ -562,6 +609,33 @@ export default function Home() {
   const handleCommand = async (text: string) => {
     const clean = text.trim();
     if (!clean) return;
+    if (stockDraft) {
+      const value = numberFromText(clean);
+      const product = products.find(item => item.id === stockDraft.productId);
+      if (!product || !Number.isFinite(value) || value < 0) {
+        speak("Mohon sebutkan harga dalam angka.");
+        return;
+      }
+      if (stockDraft.costPrice === undefined) {
+        setStockDraft({ ...stockDraft, costPrice: value });
+        speak(`Berapa harga jual ${product.name}?`);
+        setStatus("idle");
+        setTranscript("");
+        return;
+      }
+      const nextStock = stockDraft.additive ? product.stock + stockDraft.quantity : stockDraft.quantity;
+      setProducts(current => current.map(item => item.id === product.id
+        ? { ...item, stock: nextStock, costPrice: stockDraft.costPrice ?? item.costPrice, price: value }
+        : item));
+      setStockDraft(null);
+      const reply = `Stok ${product.name} diperbarui menjadi ${nextStock}. Harga beli ${currency(stockDraft.costPrice)}, harga jual ${currency(value)}.`;
+      setLastHeard(reply);
+      speak(reply);
+      showCartNotice("Stok dan harga berhasil diperbarui");
+      setStatus("idle");
+      setTranscript("");
+      return;
+    }
     const confirmationText = clean
       .toLowerCase()
       .replace(/[.,!?]/g, " ")
