@@ -162,10 +162,16 @@ export default function Home() {
   const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
-    const handleSpeaking = (event: Event) => setIsSpeaking((event as CustomEvent<boolean>).detail);
+    const handleSpeaking = (event: Event) => {
+      const speaking = (event as CustomEvent<boolean>).detail;
+      setIsSpeaking(speaking);
+      if (!speaking && pending?.type === "checkout" && status === "idle") {
+        startListening();
+      }
+    };
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
-  }, []);
+  }, [pending, status]);
 
   useEffect(() => () => {
     if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
@@ -737,7 +743,7 @@ export default function Home() {
         </nav>
       </div>
 
-      {pending && <div className="fixed inset-0 z-30 grid place-items-end bg-slate-950/30 p-4 backdrop-blur-sm sm:place-items-center"><div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-emerald-600"><Sparkles size={14} />Konfirmasi suara</div><h3 className="text-2xl font-black tracking-tight">{pending.type === "add" ? "Tambahkan ke keranjang?" : pending.type === "checkout" ? "Simpan transaksi?" : "Kosongkan keranjang?"}</h3></div><button onClick={() => setPending(null)} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white"><X size={17} /></button></div>{pending.type === "add" && <div className="mb-5 space-y-2 rounded-2xl bg-slate-50 p-4">{pending.items?.map(item => <div key={item.name} className="flex justify-between text-sm font-bold"><span>{item.quantity}× {item.name}</span><span className="text-slate-400">{(() => { const p = findProduct(products, item.name); return p ? currency(p.price * item.quantity) : "—"; })()}</span></div>)}</div>}{pending.type === "checkout" && <div className="mb-5 rounded-2xl bg-slate-50 p-4"><div className="flex justify-between text-sm font-bold"><span>{itemCount} item</span><span>{currency(total)}</span></div><div className="mt-2 text-xs text-slate-400">Pembayaran: {pending.payment === "qr" ? "QRIS" : pending.payment === "debit" ? "Debit" : "Tunai"}</div></div>}<p className="mb-6 text-sm leading-6 text-slate-500">{pending.reply}</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setPending(null)} className="rounded-2xl border border-slate-200 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Belum</button><button onClick={confirmPending} className="rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600">Ya, lanjutkan</button></div></div></div>}
+      {pending && <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/30 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.15em] text-emerald-600"><Sparkles size={14} />Konfirmasi suara</div><h3 className="text-2xl font-black tracking-tight">{pending.type === "add" ? "Tambahkan ke keranjang?" : pending.type === "checkout" ? "Simpan transaksi?" : "Kosongkan keranjang?"}</h3></div><button onClick={() => setPending(null)} className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-900 hover:text-white"><X size={17} /></button></div>{pending.type === "add" && <div className="mb-5 space-y-2 rounded-2xl bg-slate-50 p-4">{pending.items?.map(item => <div key={item.name} className="flex justify-between text-sm font-bold"><span>{item.quantity}× {item.name}</span><span className="text-slate-400">{(() => { const p = findProduct(products, item.name); return p ? currency(p.price * item.quantity) : "—"; })()}</span></div>)}</div>}{pending.type === "checkout" && <div className="mb-5 rounded-2xl bg-slate-50 p-4"><div className="flex justify-between text-sm font-bold"><span>{itemCount} item</span><span>{currency(total)}</span></div><div className="mt-2 text-xs text-slate-400">Pembayaran: {pending.payment === "qr" ? "QRIS" : pending.payment === "debit" ? "Debit" : "Tunai"}</div></div>}<p className="mb-6 text-sm leading-6 text-slate-500">{pending.reply}</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setPending(null)} className="rounded-2xl border border-slate-200 py-3.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Belum</button><button onClick={confirmPending} className="rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600">Ya, lanjutkan</button></div></div></div>}
     </div>
   );
 }
