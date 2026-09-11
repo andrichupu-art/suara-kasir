@@ -603,15 +603,19 @@ export default function Home() {
           </div>
         </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
-          <div className="relative mx-auto flex max-w-lg items-end justify-between">
-            {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex min-w-[70px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold ${activeTab === item.id ? "text-slate-900" : "text-slate-400"}`}><item.icon size={19} /><span>{item.label}</span></button>)}
-            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 grid h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-8 border-white transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-500 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
+        <nav className="fixed bottom-3 left-1/2 z-20 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 lg:hidden">
+          <div className="relative flex h-[74px] items-center justify-between rounded-[2rem] border border-slate-100 bg-white/95 px-6 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur">
+            <div className="pointer-events-none absolute left-1/2 top-0 h-[92px] w-[92px] -translate-x-1/2 -translate-y-[18px] rounded-full bg-[#f7f8fa]" />
+            <div className="relative z-10 flex w-[42%] justify-between">
+              {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
+            </div>
+            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
               <span className="absolute inset-1 rounded-full border border-white/30" />
               {status === "listening" ? <div className="flex items-center gap-1"><span className="h-5 w-1 rounded-full bg-white animate-pulse" /><span className="h-8 w-1 rounded-full bg-white animate-pulse" /><span className="h-6 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={30} className="text-white" />}
             </button>
-            <span className={`pointer-events-none absolute left-1/2 top-[3.8rem] -translate-x-1/2 text-[9px] font-extrabold ${status === "listening" ? "text-rose-500" : "text-emerald-600"}`}>{status === "listening" ? "DENGAR" : "BICARA"}</span>
-            {nav.slice(2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex min-w-[70px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold ${activeTab === item.id ? "text-slate-900" : "text-slate-400"}`}><item.icon size={19} /><span>{item.label}</span></button>)}
+            <div className="relative z-10 flex w-[42%] justify-between">
+              {nav.slice(2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
+            </div>
           </div>
         </nav>
       </div>
