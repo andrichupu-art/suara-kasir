@@ -23,17 +23,18 @@ import {
   X,
 } from "lucide-react";
 
-type Product = { id: string; name: string; price: number; costPrice: number; stock: number; category: string; color: string };
+type Product = { id: string; name: string; price: number; costPrice: number; stock: number; category: string; color: string; aliases?: string[] };
 type CartItem = Product & { quantity: number };
 type Transaction = { id: string; createdAt: string; items: CartItem[]; total: number; payment: string };
 type Provider = "google" | "groq" | "openrouter" | "cerebras";
+type ConversationTurn = { user: string; assistant: string };
 
 const initialProducts: Product[] = [
   { id: "kopi-susu", name: "Kopi Susu", price: 18000, costPrice: 10000, stock: 100, category: "Minuman", color: "from-amber-100 to-orange-50" },
-  { id: "es-teh", name: "Es Teh Manis", price: 8000, costPrice: 4000, stock: 100, category: "Minuman", color: "from-cyan-100 to-sky-50" },
+  { id: "es-teh", name: "Es Teh Manis", price: 8000, costPrice: 4000, stock: 100, category: "Minuman", color: "from-cyan-100 to-sky-50", aliases: ["es teh", "teh manis", "teh"] },
   { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, costPrice: 14000, stock: 100, category: "Makanan", color: "from-rose-100 to-orange-50" },
   { id: "mie-goreng", name: "Mie Goreng", price: 21000, costPrice: 12000, stock: 100, category: "Makanan", color: "from-lime-100 to-emerald-50" },
-  { id: "air-mineral", name: "Air Mineral", price: 5000, costPrice: 2500, stock: 100, category: "Minuman", color: "from-indigo-100 to-blue-50" },
+  { id: "air-mineral", name: "Air Mineral", price: 5000, costPrice: 2500, stock: 100, category: "Minuman", color: "from-indigo-100 to-blue-50", aliases: ["air", "air putih", "aqua"] },
   { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, costPrice: 7000, stock: 100, category: "Camilan", color: "from-yellow-100 to-amber-50" },
 ];
 
@@ -101,11 +102,19 @@ function findProduct(products: Product[], phrase: string) {
 
   return products
     .map(product => {
-      const productName = product.name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim();
-      const productWords = productName.split(/\s+/).filter(Boolean);
-      const overlap = productWords.filter(word => phraseWords.includes(word)).length;
-      const exact = normalized.includes(productName);
-      const coverage = overlap / Math.min(productWords.length, phraseWords.length);
+      const names = [product.name, ...(product.aliases ?? [])].map(name => name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").trim());
+      const bestMatch = names.map(name => {
+        const words = name.split(/\s+/).filter(Boolean);
+        const overlap = words.filter(word => phraseWords.includes(word)).length;
+        const exact = normalized.includes(name);
+        const coverage = overlap / Math.min(words.length, phraseWords.length);
+        return { name, words, overlap, exact, coverage };
+      }).sort((a, b) => Number(b.exact) - Number(a.exact) || b.overlap - a.overlap)[0];
+      const productName = bestMatch.name;
+      const productWords = bestMatch.words;
+      const overlap = bestMatch.overlap;
+      const exact = bestMatch.exact;
+      const coverage = bestMatch.coverage;
       const matches = exact || coverage === 1 || overlap >= 2 || (overlap > 0 && overlap / productWords.length >= 0.5);
       return { product, score: exact ? 100 : matches ? overlap / productWords.length : 0 };
     })
@@ -134,6 +143,7 @@ export default function Home() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastHeard, setLastHeard] = useState("");
   const [cartNotice, setCartNotice] = useState("");
+  const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const [pending, setPending] = useState<{ type: "add" | "checkout" | "cancel"; items?: Array<{ name: string; quantity: number }>; payment?: string; reply: string } | null>(null);
   const [payment, setPayment] = useState("cash");
   const [provider, setProvider] = useState<Provider>(() => load("suara-kasir-provider", "google"));
@@ -545,6 +555,9 @@ export default function Home() {
     }
     const savedApiKey = apiKey.trim();
     const localCommand = parseLocal(clean);
+    const context = conversationHistory.length
+      ? `Konteks percakapan sebelumnya:\n${conversationHistory.map(turn => `Kasir: ${turn.user}\nAsisten: ${turn.assistant}`).join("\n")}\n\nPerintah terbaru kasir: ${clean}`
+      : clean;
     setLastHeard(clean);
     setStatus("thinking");
     try {
@@ -553,8 +566,9 @@ export default function Home() {
       if (localCommand.type !== "unknown") {
         applyCommand(localCommand, clean);
       } else if (savedApiKey) {
-        const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey: savedApiKey, model });
+        const result = await parseCommand.mutateAsync({ transcript: context, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey: savedApiKey, model });
         applyCommand(result, clean);
+        setConversationHistory(current => [...current.slice(-4), { user: clean, assistant: result.reply || "Perintah diproses." }]);
       } else {
         applyCommand(localCommand);
       }
@@ -563,6 +577,7 @@ export default function Home() {
       if (localCommand.type === "unknown") {
         toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
       }
+      setConversationHistory(current => [...current.slice(-4), { user: clean, assistant: localCommand.reply || "Perintah diproses secara lokal." }]);
     } finally {
       setStatus("idle");
       setTranscript("");
