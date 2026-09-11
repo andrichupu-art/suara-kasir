@@ -155,6 +155,8 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const voiceModeRef = useRef<"standby" | "active" | "sleeping">("sleeping");
   const voiceStartedRef = useRef(false);
+  const speakingRef = useRef(false);
+  const restartAfterSpeechRef = useRef(false);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manualStopRef = useRef(false);
   const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,7 +168,15 @@ export default function Home() {
   const [cloudReady, setCloudReady] = useState(false);
 
   useEffect(() => {
-    const handleSpeaking = (event: Event) => setIsSpeaking((event as CustomEvent<boolean>).detail);
+    const handleSpeaking = (event: Event) => {
+      const speaking = (event as CustomEvent<boolean>).detail;
+      speakingRef.current = speaking;
+      setIsSpeaking(speaking);
+      if (!speaking && restartAfterSpeechRef.current && !manualStopRef.current && voiceModeRef.current !== "sleeping") {
+        restartAfterSpeechRef.current = false;
+        startListening(true);
+      }
+    };
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
   }, []);
@@ -597,6 +607,7 @@ export default function Home() {
       if (voiceModeRef.current === "sleeping") setVoiceModeSafe("standby");
     };
     recognition.onresult = (event: any) => {
+      if (speakingRef.current) return;
       const latestResult = event.results[event.results.length - 1];
       const text = latestResult?.[0]?.transcript ?? "";
       setTranscript(text);
@@ -625,6 +636,11 @@ export default function Home() {
     recognition.onend = () => {
       recognitionRef.current = null;
       if (manualStopRef.current || voiceModeRef.current === "sleeping") {
+        setStatus("idle");
+        return;
+      }
+      if (speakingRef.current) {
+        restartAfterSpeechRef.current = true;
         setStatus("idle");
         return;
       }
