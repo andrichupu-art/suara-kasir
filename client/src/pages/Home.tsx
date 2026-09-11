@@ -392,24 +392,24 @@ export default function Home() {
     const clean = text.trim();
     if (!clean) return;
     const savedApiKey = apiKey.trim();
+    const localCommand = parseLocal(clean);
     setLastHeard(clean);
     setStatus("thinking");
     try {
-      if (savedApiKey) {
+      // Handle common cashier commands locally so speech input does not wait
+      // for a network round trip when the product and intent are unambiguous.
+      if (localCommand.type !== "unknown") {
+        applyCommand(localCommand, clean);
+      } else if (savedApiKey) {
         const result = await parseCommand.mutateAsync({ transcript: clean, catalog: products.map(({ name, price }) => ({ name, price })), provider, apiKey: savedApiKey, model });
         applyCommand(result, clean);
       } else {
-        applyCommand(parseLocal(clean));
+        applyCommand(localCommand);
       }
     } catch (error) {
-      const localCommand = parseLocal(clean);
       applyCommand(localCommand);
       if (localCommand.type === "unknown") {
         toast.error("AI tidak merespons", { description: error instanceof Error ? error.message : "Periksa koneksi dan API key." });
-      } else {
-        toast.warning("AI tidak merespons", {
-          description: `Perintah diproses lokal. ${error instanceof Error ? error.message : "Periksa koneksi provider AI."}`,
-        });
       }
     } finally {
       setStatus("idle");
