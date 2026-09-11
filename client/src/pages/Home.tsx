@@ -110,10 +110,11 @@ function findProduct(products: Product[], phrase: string) {
 }
 
 function numberFromText(text: string) {
-  const digit = text.match(/\b(\d+)\b/);
-  if (digit) return Number(digit[1]);
   const numbers: Record<string, number> = { satu: 1, dua: 2, tiga: 3, empat: 4, lima: 5, enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10 };
-  for (const [word, value] of Object.entries(numbers)) if (text.toLowerCase().includes(word)) return value;
+  const pattern = new RegExp(`\\b(\\d+|${Object.keys(numbers).join("|")})\\b`, "gi");
+  const matches = Array.from(text.toLowerCase().matchAll(pattern));
+  const value = matches.at(-1)?.[1];
+  if (value) return /^\d+$/.test(value) ? Number(value) : numbers[value];
   return 1;
 }
 const normalizedProductName = (name: string) => name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
@@ -350,15 +351,19 @@ export default function Home() {
     if (matches.length > 1) {
       return {
         type: "add" as const,
-        items: matches.map((match, index) => ({
-          name: match.product.name,
-          quantity: numberFromText(lower.slice(
-            index
-              ? matches[index - 1].position + normalizedProductName(matches[index - 1].product.name).length
-              : 0,
-            match.position,
-          )),
-        })),
+        items: matches.map((match, index) => {
+          const previousEnd = index
+            ? matches[index - 1].position + normalizedProductName(matches[index - 1].product.name).length
+            : 0;
+          const beforeProduct = lower.slice(previousEnd, match.position);
+          const nextStart = matches[index + 1]?.position ?? lower.length;
+          const afterProduct = lower.slice(match.position + normalizedProductName(match.product.name).length, nextStart);
+          const quantityAfterProduct = afterProduct.match(/^\s*(?:sebanyak\s+)?(\d+|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh)\b/i)?.[1];
+          return {
+            name: match.product.name,
+            quantity: quantityAfterProduct ? numberFromText(quantityAfterProduct) : numberFromText(beforeProduct),
+          };
+        }),
         reply: `${matches.length} barang masuk keranjang.`,
       };
     }
