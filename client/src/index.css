@@ -98,9 +98,9 @@
 @layer components {
   .container { width: 100%; margin-left: auto; margin-right: auto; padding-left: 1rem; padding-right: 1rem; }
   .flex { min-height: 0; min-width: 0; }
-  button.bg-slate-900 { background-color: rgb(5 150 105); }
-  button.bg-slate-900:hover { background-color: rgb(4 120 87); }
-  button[class~="hover:bg-slate-900"]:hover { background-color: rgb(5 150 105); }
+  button.bg-slate-900 { background-color: rgb(5 150 105) !important; }
+  button.bg-slate-900:hover { background-color: rgb(4 120 87) !important; }
+  button[class~="hover:bg-slate-900"]:hover { background-color: rgb(5 150 105) !important; }
   @media (min-width: 640px) { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
   @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }
 }
