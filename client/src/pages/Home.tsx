@@ -23,18 +23,18 @@ import {
   X,
 } from "lucide-react";
 
-type Product = { id: string; name: string; price: number; stock: number; category: string; color: string };
+type Product = { id: string; name: string; price: number; costPrice: number; stock: number; category: string; color: string };
 type CartItem = Product & { quantity: number };
 type Transaction = { id: string; createdAt: string; items: CartItem[]; total: number; payment: string };
 type Provider = "google" | "groq" | "openrouter" | "cerebras";
 
 const initialProducts: Product[] = [
-  { id: "kopi-susu", name: "Kopi Susu", price: 18000, stock: 100, category: "Minuman", color: "from-amber-100 to-orange-50" },
-  { id: "es-teh", name: "Es Teh Manis", price: 8000, stock: 100, category: "Minuman", color: "from-cyan-100 to-sky-50" },
-  { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, stock: 100, category: "Makanan", color: "from-rose-100 to-orange-50" },
-  { id: "mie-goreng", name: "Mie Goreng", price: 21000, stock: 100, category: "Makanan", color: "from-lime-100 to-emerald-50" },
-  { id: "air-mineral", name: "Air Mineral", price: 5000, stock: 100, category: "Minuman", color: "from-indigo-100 to-blue-50" },
-  { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, stock: 100, category: "Camilan", color: "from-yellow-100 to-amber-50" },
+  { id: "kopi-susu", name: "Kopi Susu", price: 18000, costPrice: 10000, stock: 100, category: "Minuman", color: "from-amber-100 to-orange-50" },
+  { id: "es-teh", name: "Es Teh Manis", price: 8000, costPrice: 4000, stock: 100, category: "Minuman", color: "from-cyan-100 to-sky-50" },
+  { id: "nasi-goreng", name: "Nasi Goreng", price: 24000, costPrice: 14000, stock: 100, category: "Makanan", color: "from-rose-100 to-orange-50" },
+  { id: "mie-goreng", name: "Mie Goreng", price: 21000, costPrice: 12000, stock: 100, category: "Makanan", color: "from-lime-100 to-emerald-50" },
+  { id: "air-mineral", name: "Air Mineral", price: 5000, costPrice: 2500, stock: 100, category: "Minuman", color: "from-indigo-100 to-blue-50" },
+  { id: "pisang-goreng", name: "Pisang Goreng", price: 12000, costPrice: 7000, stock: 100, category: "Camilan", color: "from-yellow-100 to-amber-50" },
 ];
 
 const providerOptions: Array<{ value: Provider; label: string; model: string; note: string }> = [
@@ -70,7 +70,7 @@ const dateFromText = (text: string) => {
 const load = <T,>(key: string, fallback: T): T => {
   try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; }
 };
-const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", initialProducts).map(product => ({ ...product, stock: Number.isFinite(product.stock) ? product.stock : 100 }));
+const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", initialProducts).map(product => ({ ...product, costPrice: Number.isFinite(product.costPrice) ? product.costPrice : 0, stock: Number.isFinite(product.stock) ? product.stock : 100 }));
 
 function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -150,7 +150,7 @@ export default function Home() {
   const [apiKeySaved, setApiKeySaved] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: "", price: "", stock: "", category: "Makanan" });
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", costPrice: "", stock: "", category: "Makanan" });
   const recognitionRef = useRef<any>(null);
   const cartNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const testConnection = trpc.ai.testConnection.useMutation();
@@ -202,6 +202,7 @@ export default function Home() {
         id: product.id,
         name: product.name,
         price: product.price,
+        costPrice: product.costPrice ?? 0,
         stock: product.stock,
         category: product.category,
         color: product.color,
@@ -215,6 +216,7 @@ export default function Home() {
           id: item.productId,
           name: item.name,
           price: item.price,
+          costPrice: 0,
           quantity: item.quantity,
           stock: 0,
           category: "",
@@ -591,9 +593,17 @@ export default function Home() {
     if (!newProduct.name.trim() || !price) return toast.error("Lengkapi nama dan harga produk.");
     const stock = Number(newProduct.stock);
     if (!Number.isInteger(stock) || stock < 0) return toast.error("Stok harus berupa angka 0 atau lebih.");
-    setProducts(current => [...current, { id: `${newProduct.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, name: newProduct.name.trim(), price, stock, category: newProduct.category, color: "from-violet-100 to-fuchsia-50" }]);
-    setNewProduct({ name: "", price: "", stock: "", category: "Makanan" });
+    const costPrice = Number(newProduct.costPrice);
+    if (!Number.isInteger(costPrice) || costPrice < 0) return toast.error("Harga modal harus berupa angka 0 atau lebih.");
+    setProducts(current => [...current, { id: `${newProduct.name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, name: newProduct.name.trim(), price, costPrice, stock, category: newProduct.category, color: "from-violet-100 to-fuchsia-50" }]);
+    setNewProduct({ name: "", price: "", costPrice: "", stock: "", category: "Makanan" });
     toast.success("Produk ditambahkan");
+  };
+
+  const updateProduct = (id: string, field: "price" | "costPrice" | "stock", value: string) => {
+    const numericValue = Number(value);
+    if (!Number.isInteger(numericValue) || numericValue < 0) return;
+    setProducts(current => current.map(product => product.id === id ? { ...product, [field]: numericValue } : product));
   };
 
   const nav = [
@@ -604,18 +614,18 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f7f8fa] text-slate-900">
+    <div className="min-h-screen bg-transparent text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col lg:flex-row">
         <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-5 py-7 lg:flex lg:flex-col">
           <div className="mb-12 flex items-center gap-3 px-2"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-slate-900 text-white"><Mic2 size={20} /></div><div><div className="font-extrabold tracking-tight">SuaraKasir</div><div className="text-xs text-slate-400">Kasir tanpa ribet</div></div></div>
-          <div className="space-y-2">{nav.map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${activeTab === item.id ? "bg-slate-900 text-white shadow-lg shadow-slate-200" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}><item.icon size={18} />{item.label}</button>)}</div>
+          <div className="space-y-2">{nav.map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${activeTab === item.id ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200" : "text-slate-500 hover:bg-slate-50 hover:text-emerald-700"}`}><item.icon size={18} />{item.label}</button>)}</div>
           <div className="mt-auto rounded-3xl bg-[#e7f3ee] p-4"><div className="mb-2 flex items-center gap-2 text-sm font-bold text-emerald-900"><Sparkles size={16} />Mode pintar</div><p className="text-xs leading-5 text-emerald-800/70">Sebutkan barang seperti bicara biasa. AI akan memahami jumlah dan perintahmu.</p></div>
         </aside>
 
         <main className="min-w-0 flex-1 pb-56 lg:pb-8">
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
-              <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
+              <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
               {cartNotice && <div className="mb-4 flex animate-in items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 fade-in slide-in-from-top-1 duration-300" role="status" aria-live="polite"><Check size={14} />{cartNotice}</div>}
               <div className="flex h-28 translate-y-3 items-center justify-center sm:h-36" aria-live="polite">
                 <div className="flex h-24 w-full max-w-md items-center justify-center gap-1.5 px-4" aria-label={isSpeaking ? "Aplikasi sedang berbicara" : "Waveform siap"}>
@@ -633,12 +643,36 @@ export default function Home() {
                 </div>}
               </section>
               <div className="fixed bottom-[102px] left-0 right-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:mt-6 lg:border lg:border-slate-100 lg:rounded-[2rem] lg:px-6">
-                <div className="mx-auto max-w-6xl"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
+                <div className="mx-auto max-w-6xl"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
               </div>
 
             </>}
 
-            {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]"><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div><div className="space-y-4"><label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Harga<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })}             placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Stok<input type="number" min="0" step="1" value={newProduct.stock} onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })} placeholder="Contoh: 20" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label><label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label><button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button></div></div><div className="rounded-[2rem] bg-white p-6 shadow-sm"><div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div><div className="grid gap-3 sm:grid-cols-2">{products.map(product => <div key={product.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${product.color}`}><span className="font-black text-slate-500">{product.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{product.name}</div>            <div className="text-xs text-slate-400">{product.category} · {currency(product.price)} · Stok {product.stock}</div></div>{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16} /></button>}</div>)}</div></div></section>}
+            {activeTab === "produk" && <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+              <div className="rounded-[2rem] bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center gap-2 text-sm font-bold"><Plus size={17} className="text-emerald-600" />Tambah produk</div>
+                <div className="space-y-4">
+                  <label className="block text-xs font-bold text-slate-500">Nama produk<input value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} placeholder="Contoh: Roti Bakar" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-xs font-bold text-slate-500">Harga jual<input type="number" value={newProduct.price} onChange={e => setNewProduct({ ...newProduct, price: e.target.value })} placeholder="15000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label>
+                    <label className="block text-xs font-bold text-slate-500">Harga modal<input type="number" min="0" value={newProduct.costPrice} onChange={e => setNewProduct({ ...newProduct, costPrice: e.target.value })} placeholder="10000" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label>
+                  </div>
+                  <label className="block text-xs font-bold text-slate-500">Stok<input type="number" min="0" step="1" value={newProduct.stock} onChange={e => setNewProduct({ ...newProduct, stock: e.target.value })} placeholder="Contoh: 20" className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400" /></label>
+                  <label className="block text-xs font-bold text-slate-500">Kategori<select value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-400"><option>Makanan</option><option>Minuman</option><option>Camilan</option><option>Lainnya</option></select></label>
+                  <button onClick={saveProduct} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white hover:bg-emerald-600"><Plus size={17} />Simpan produk</button>
+                </div>
+              </div>
+              <div className="rounded-[2rem] bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between"><div><h2 className="text-lg font-black">Katalog produk</h2><p className="mt-1 text-xs text-slate-400">{products.length} produk tersedia untuk suara</p></div><Package className="text-slate-300" /></div>
+                <div className="rounded-2xl border border-slate-100">
+                  <table className="w-full table-fixed text-left text-[11px]">
+                    <colgroup><col className="w-[36%]" /><col className="w-[23%]" /><col className="w-[23%]" /><col className="w-[13%]" /><col className="w-[5%]" /></colgroup>
+                    <thead className="bg-slate-50 text-[9px] uppercase tracking-wide text-slate-500"><tr><th className="px-1.5 py-2 font-bold">Produk</th><th className="px-1.5 py-2 font-bold">Jual</th><th className="px-1.5 py-2 font-bold">Modal</th><th className="px-1.5 py-2 font-bold">Qty</th><th className="px-1 py-2" /></tr></thead>
+                    <tbody>{products.map(product => <tr key={product.id} className="border-t border-slate-100"><td className="px-1.5 py-2"><span className="block truncate font-bold">{product.name}</span></td><td className="px-1.5 py-2"><input type="number" min="0" value={product.price} onChange={event => updateProduct(product.id, "price", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2"><input type="number" min="0" value={product.costPrice} onChange={event => updateProduct(product.id, "costPrice", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1.5 py-2"><input type="number" min="0" step="1" value={product.stock} onChange={event => updateProduct(product.id, "stock", event.target.value)} className="w-full min-w-0 border-0 bg-transparent p-0 font-semibold outline-none focus:ring-0" /></td><td className="px-1 py-2 text-right">{!initialProducts.some(item => item.id === product.id) && <button onClick={() => setProducts(current => current.filter(item => item.id !== product.id))} className="text-slate-300 hover:text-rose-500" aria-label={`Hapus ${product.name}`}><Trash2 size={14} /></button>}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </div>
+            </section>}
 
             {activeTab === "riwayat" && reportDate && (() => {
               const reportTransactions = transactions.filter(transaction => localDateKey(new Date(transaction.createdAt)) === reportDate);
