@@ -341,7 +341,10 @@ export default function Home() {
     if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
     if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
     if (/(rekap|ringkasan|laporan|omzet|omset|pendapatan(?:\s+penjualan)?)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
-    if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
+    if (/(keranjang|transaksi|item|barang).*(kosong|kosongkan|hapus|bersihkan|clear)|(?:kosongkan|bersihkan|clear)\s+(?:isi\s+)?(?:keranjang|transaksi)|hapus\s+(?:semua|seluruh)\s+(?:isi\s+)?(?:keranjang|item|barang|transaksi)|hapus semua/.test(lower)) {
+      return { type: "cancel" as const, reply: "Keranjang akan dikosongkan. Apakah Anda yakin?" };
+    }
+    if (/(batalkan|batal|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(hapus|buang|hilangkan)/.test(lower)) {
       const target = lower.match(/(?:hapus|buang|hilangkan)(?:\s+(?:item|barang))?\s+(.+)/)?.[1]?.trim();
       const product = target && findProduct(products, target);
@@ -488,7 +491,15 @@ export default function Home() {
       setPending({ type: "checkout", payment: method, reply: confirmation });
       speak(confirmation);
     }
-    else if (command.action === "cancel" || command.type === "cancel") setPending({ type: "cancel", reply: command.reply });
+    else if (command.action === "cancel" || command.type === "cancel") {
+      if (!cart.length) {
+        const message = "Keranjang sudah kosong.";
+        setLastHeard(message);
+        speak(message);
+        return;
+      }
+      setPending({ type: "cancel", reply: command.reply || "Keranjang akan dikosongkan. Apakah Anda yakin?" });
+    }
     else { setLastHeard(command.reply || "Coba sebutkan nama barangnya."); speak(command.reply || "Coba sebutkan nama barangnya."); }
   };
 
