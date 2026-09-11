@@ -352,7 +352,12 @@ export default function Home() {
         type: "add" as const,
         items: matches.map((match, index) => ({
           name: match.product.name,
-          quantity: numberFromText(lower.slice(index ? matches[index - 1].position : 0, match.position)),
+          quantity: numberFromText(lower.slice(
+            index
+              ? matches[index - 1].position + normalizedProductName(matches[index - 1].product.name).length
+              : 0,
+            match.position,
+          )),
         })),
         reply: `${matches.length} barang masuk keranjang.`,
       };
@@ -561,11 +566,15 @@ export default function Home() {
     recognition.lang = "id-ID";
     recognition.interimResults = true;
     recognition.continuous = false;
+    let commandSubmitted = false;
     recognition.onstart = () => setStatus("listening");
     recognition.onresult = (event: any) => {
       const text = Array.from(event.results).map((result: any) => result[0].transcript).join("");
       setTranscript(text);
-      if (event.results[event.results.length - 1].isFinal) handleCommand(text);
+      if (event.results[event.results.length - 1].isFinal && !commandSubmitted) {
+        commandSubmitted = true;
+        handleCommand(text);
+      }
     };
     recognition.onerror = () => { setStatus("idle"); toast.error("Suara belum tertangkap", { description: "Coba bicara lebih dekat dengan mikrofon." }); };
     recognition.onend = () => setStatus(current => current === "listening" ? "idle" : current);
