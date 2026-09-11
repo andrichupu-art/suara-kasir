@@ -323,6 +323,8 @@ export default function Home() {
 
   const parseLocal = (text: string) => {
     const lower = text.toLowerCase();
+    if (/(stok|persediaan).*(menipis|sedikit|kurang|hampir habis)|stok menipis/.test(lower)) return { type: "stock_low" as const, reply: "" };
+    if (/(stok|persediaan).*(aman|banyak|cukup|tersedia)|stok masih banyak/.test(lower)) return { type: "stock_safe" as const, reply: "" };
     if (/(rekap|ringkasan|laporan|omzet|pendapatan penjualan)/.test(lower)) return { type: "summary" as const, summaryDate: dateFromText(lower), reply: "" };
     if (/(batalkan|batal|hapus semua|cancel)/.test(lower)) return { type: "cancel" as const, reply: "Baik, dibatalkan." };
     if (/(hapus|buang|hilangkan)/.test(lower)) {
@@ -369,8 +371,26 @@ export default function Home() {
     toast.success("Rekap transaksi", { description: message });
   };
 
+  const showStockReport = (type: "low" | "safe") => {
+    const matching = products.filter(product => type === "low" ? product.stock < 5 : product.stock >= 5);
+    const message = type === "low"
+      ? matching.length
+        ? `Stok menipis: ${matching.map(product => `${product.name} tersisa ${product.stock}`).join(", ")}.`
+        : "Semua item atau barang sampai saat ini aman."
+      : matching.length
+        ? `Stok aman: ${matching.map(product => `${product.name} tersisa ${product.stock}`).join(", ")}.`
+        : "Belum ada item dengan stok 5 atau lebih.";
+    setLastHeard(message);
+    speak(message);
+    toast.info(type === "low" ? "Stok menipis" : "Stok aman", { description: message });
+  };
+
   const applyCommand = (command: any, fallbackText?: string) => {
-    if (command.action === "remove_item" || command.type === "remove") {
+    if (command.action === "stock_low" || command.type === "stock_low") {
+      showStockReport("low");
+    } else if (command.action === "stock_safe" || command.type === "stock_safe") {
+      showStockReport("safe");
+    } else if (command.action === "remove_item" || command.type === "remove") {
       const items: Array<{ name?: unknown }> = Array.isArray(command.items) ? command.items : [];
       const removed = items.some(item => {
         const product = findProduct(products, String(item.name ?? ""));
