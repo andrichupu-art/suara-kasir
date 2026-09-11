@@ -165,13 +165,14 @@ export default function Home() {
     const handleSpeaking = (event: Event) => {
       const speaking = (event as CustomEvent<boolean>).detail;
       setIsSpeaking(speaking);
-      if (!speaking && pending?.type === "checkout" && status === "idle") {
-        startListening();
-      }
     };
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
-  }, [pending, status]);
+  }, [isSpeaking, pending, status]);
+
+  useEffect(() => {
+    if (pending && !isSpeaking && status === "idle") startListening();
+  }, [isSpeaking, pending, status]);
 
   useEffect(() => () => {
     if (cartNoticeTimerRef.current) clearTimeout(cartNoticeTimerRef.current);
