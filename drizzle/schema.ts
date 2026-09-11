@@ -21,6 +21,7 @@ export const products = pgTable("products", {
   id: varchar("id", { length: 128 }).primaryKey(),
   name: varchar("name", { length: 160 }).notNull(),
   price: integer("price").notNull(),
+  costPrice: integer("costPrice").notNull().default(0),
   stock: integer("stock").notNull().default(0),
   category: varchar("category", { length: 80 }).notNull(),
   color: varchar("color", { length: 120 }).notNull(),

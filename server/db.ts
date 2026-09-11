@@ -97,6 +97,7 @@ export async function migrateStoreData(
       set: {
         name: sql`excluded."name"`,
         price: sql`excluded."price"`,
+        costPrice: sql`excluded."costPrice"`,
         stock: sql`excluded."stock"`,
         category: sql`excluded."category"`,
         color: sql`excluded."color"`,

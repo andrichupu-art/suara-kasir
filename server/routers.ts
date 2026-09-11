@@ -25,6 +25,7 @@ const storeProductSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   price: z.number().int().nonnegative(),
+  costPrice: z.number().int().nonnegative(),
   stock: z.number().int().nonnegative(),
   category: z.string().min(1),
   color: z.string().min(1),
