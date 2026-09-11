@@ -3,7 +3,7 @@
 // resolved by the function builder.
 import { COOKIE_NAME } from "../shared/const.js";
 import { z } from "zod";
-import { getStoreSnapshot, migrateStoreData } from "./db.js";
+import { getStoreSnapshot, migrateStoreData, upsertStoreProduct } from "./db.js";
 import { getSessionCookieOptions } from "./_core/cookies.js";
 import { systemRouter } from "./_core/systemRouter.js";
 import { publicProcedure, router } from "./_core/trpc.js";
@@ -246,6 +246,7 @@ export const appRouter = router({
   }),
   store: router({
     snapshot: publicProcedure.query(async () => getStoreSnapshot()),
+    upsertProduct: publicProcedure.input(storeProductSchema).mutation(async ({ input }) => upsertStoreProduct(input)),
     migrate: publicProcedure.input(migrateStoreSchema).mutation(async ({ input }) => migrateStoreData(
       input.products,
       input.transactions.map(transaction => ({

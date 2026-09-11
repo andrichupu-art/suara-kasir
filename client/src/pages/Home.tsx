@@ -174,6 +174,7 @@ export default function Home() {
   const parseCommand = trpc.ai.parseCommand.useMutation();
   const storeSnapshot = trpc.store.snapshot.useQuery(undefined, { retry: false });
   const migrateStore = trpc.store.migrate.useMutation();
+  const upsertProduct = trpc.store.upsertProduct.useMutation();
   const cloudSyncAttempted = useRef(false);
   const [cloudReady, setCloudReady] = useState(false);
 
@@ -627,6 +628,15 @@ export default function Home() {
       setProducts(current => current.map(item => item.id === product.id
         ? { ...item, stock: nextStock, costPrice: stockDraft.costPrice ?? item.costPrice, price: value }
         : item));
+      upsertProduct.mutate({
+        id: product.id,
+        name: product.name,
+        price: value,
+        costPrice: stockDraft.costPrice,
+        stock: nextStock,
+        category: product.category,
+        color: product.color,
+      });
       setStockDraft(null);
       const reply = `Stok ${product.name} diperbarui menjadi ${nextStock}. Harga beli ${currency(stockDraft.costPrice)}, harga jual ${currency(value)}.`;
       setLastHeard(reply);

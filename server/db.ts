@@ -113,3 +113,21 @@ export async function migrateStoreData(
   }
   return getStoreSnapshot();
 }
+
+export async function upsertStoreProduct(product: InsertProduct) {
+  const db = getDb();
+  if (!db) throw new Error("Database belum dikonfigurasi.");
+  await db.insert(products).values(product).onConflictDoUpdate({
+    target: products.id,
+    set: {
+      name: sql`excluded."name"`,
+      price: sql`excluded."price"`,
+      costPrice: sql`excluded."costPrice"`,
+      stock: sql`excluded."stock"`,
+      category: sql`excluded."category"`,
+      color: sql`excluded."color"`,
+      updatedAt: sql`excluded."updatedAt"`,
+    },
+  });
+  return product;
+}
