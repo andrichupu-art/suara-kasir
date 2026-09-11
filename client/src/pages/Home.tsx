@@ -174,12 +174,8 @@ export default function Home() {
       speakingRef.current = speaking;
       setIsSpeaking(speaking);
       if (speaking) {
-        restartAfterSpeechRef.current = true;
-        recognitionRef.current?.stop();
-      } else {
-        commandInProgressRef.current = false;
-      }
-      if (!speaking && restartAfterSpeechRef.current && !manualStopRef.current && voiceModeRef.current !== "sleeping") {
+        restartAfterSpeechRef.current = false;
+      } else if (restartAfterSpeechRef.current && !manualStopRef.current && voiceModeRef.current !== "sleeping") {
         restartAfterSpeechRef.current = false;
         startListening(true);
       }
@@ -504,6 +500,19 @@ export default function Home() {
   const handleCommand = async (text: string) => {
     const clean = text.trim();
     if (!clean) return;
+    if (pending && /^(ya|iya|benar|simpan|lanjutkan|oke|ok)(\s+(simpan|lanjutkan|transaksi))?[.!]?$/i.test(clean)) {
+      confirmPending();
+      setStatus("idle");
+      setTranscript("");
+      return;
+    }
+    if (pending && /^(tidak|nggak|enggak|batal|batalkan|belum)[.!]?$/i.test(clean)) {
+      setPending(null);
+      speak("Baik, transaksi dibatalkan.");
+      setStatus("idle");
+      setTranscript("");
+      return;
+    }
     const savedApiKey = apiKey.trim();
     const localCommand = parseLocal(clean);
     setLastHeard(clean);
