@@ -618,9 +618,9 @@ export default function Home() {
               <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
               {cartNotice && <div className="mb-4 flex animate-in items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 fade-in slide-in-from-top-1 duration-300" role="status" aria-live="polite"><Check size={14} />{cartNotice}</div>}
               <div className="flex h-28 translate-y-3 items-center justify-center sm:h-36" aria-live="polite">
-                {isSpeaking && <div className="flex h-24 w-full max-w-md items-center justify-center gap-1.5 px-4" aria-label="Aplikasi sedang berbicara">
-                  {[18, 30, 44, 58, 72, 88, 64, 46, 76, 96, 68, 48, 80, 58, 38, 70, 92, 62, 42, 28, 18].map((height, index) => <span key={index} className="w-1.5 rounded-full bg-gradient-to-t from-emerald-500 via-emerald-400 to-teal-200 shadow-[0_0_12px_rgba(52,211,153,0.35)] animate-[wave_1.1s_ease-in-out_infinite]" style={{ height: `${height}px`, animationDelay: `${index * 55}ms` }} />)}
-                </div>}
+                <div className="flex h-24 w-full max-w-md items-center justify-center gap-1.5 px-4" aria-label={isSpeaking ? "Aplikasi sedang berbicara" : "Waveform siap"}>
+                  {[18, 30, 44, 58, 72, 88, 64, 46, 76, 96, 68, 48, 80, 58, 38, 70, 92, 62, 42, 28, 18].map((height, index) => <span key={index} className={`w-1.5 rounded-full bg-gradient-to-t from-emerald-500 via-emerald-400 to-teal-200 shadow-[0_0_12px_rgba(52,211,153,0.35)] ${isSpeaking ? "animate-[wave_1.1s_ease-in-out_infinite]" : ""}`} style={{ height: `${height}px`, animationDelay: `${index * 55}ms` }} />)}
+                </div>
               </div>
 
               <section className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
