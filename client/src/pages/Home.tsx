@@ -268,8 +268,8 @@ export default function Home() {
     }
     setCart(current => {
       const existing = current.find(item => item.id === product.id);
-      if (existing) return current.map(item => item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item);
-      return [...current, { ...product, quantity }];
+      if (existing) return [{ ...existing, quantity: existing.quantity + quantity }, ...current.filter(item => item.id !== product.id)];
+      return [{ ...product, quantity }, ...current];
     });
     return true;
   };
@@ -551,9 +551,11 @@ export default function Home() {
                   {lastHeard && <div className="mt-4 flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500"><Volume2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Terakhir: "{lastHeard}"</span></div>}
                 </div>
 
-                <div className="rounded-[2rem] bg-white p-5 shadow-sm sm:p-6">
-                  {cart.length > 0 && <div className="space-y-3">{cart.map(item => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>}
-                  <div className="mt-5 border-t border-slate-100 pt-5"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
+                <div className="flex rounded-[2rem] bg-white p-5 shadow-sm sm:p-6">
+                  <div className="flex min-h-full w-full flex-col">
+                    {cart.length > 0 && <div className={`space-y-3 ${cart.length > 3 ? "max-h-[300px] overflow-y-auto pr-1" : ""}`}>{cart.map(item => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-white text-slate-500 shadow-sm hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>}
+                    <div className="sticky bottom-0 mt-auto border-t border-slate-100 bg-white pt-5"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
+                  </div>
                 </div>
               </section>
 
