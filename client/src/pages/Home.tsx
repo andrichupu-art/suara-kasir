@@ -72,16 +72,20 @@ const load = <T,>(key: string, fallback: T): T => {
 };
 const loadProducts = (): Product[] => load<Product[]>("suara-kasir-products", initialProducts).map(product => ({ ...product, costPrice: Number.isFinite(product.costPrice) ? product.costPrice : 0, stock: Number.isFinite(product.stock) ? product.stock : 100 }));
 
+let indonesianVoice: SpeechSynthesisVoice | undefined;
+
 function speak(text: string) {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    synth.resume();
     window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: true }));
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "id-ID";
     utterance.rate = 0.96;
     utterance.pitch = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const indonesianVoice = voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
+    const voices = synth.getVoices();
+    indonesianVoice ??= voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
       ?? voices.find(voice => voice.lang.toLowerCase().startsWith("id"));
     if (indonesianVoice) utterance.voice = indonesianVoice;
     utterance.onend = () => window.dispatchEvent(new CustomEvent("suara-kasir:speaking", { detail: false }));
@@ -169,6 +173,20 @@ export default function Home() {
     window.addEventListener("suara-kasir:speaking", handleSpeaking);
     return () => window.removeEventListener("suara-kasir:speaking", handleSpeaking);
   }, [isSpeaking, pending, status]);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    const loadVoice = () => {
+      const voices = synth.getVoices();
+      indonesianVoice ??= voices.find(voice => /^id(-|_)?ID$/i.test(voice.lang))
+        ?? voices.find(voice => voice.lang.toLowerCase().startsWith("id"));
+    };
+    synth.resume();
+    loadVoice();
+    synth.addEventListener("voiceschanged", loadVoice);
+    return () => synth.removeEventListener("voiceschanged", loadVoice);
+  }, []);
 
   useEffect(() => {
     if (pending && !isSpeaking && status === "idle") startListening();
