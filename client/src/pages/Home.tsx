@@ -561,7 +561,7 @@ export default function Home() {
           <div className="mt-auto rounded-3xl bg-[#e7f3ee] p-4"><div className="mb-2 flex items-center gap-2 text-sm font-bold text-emerald-900"><Sparkles size={16} />Mode pintar</div><p className="text-xs leading-5 text-emerald-800/70">Sebutkan barang seperti bicara biasa. AI akan memahami jumlah dan perintahmu.</p></div>
         </aside>
 
-        <main className="min-w-0 flex-1 pb-48 lg:pb-8">
+        <main className="min-w-0 flex-1 pb-56 lg:pb-8">
           <div className="px-5 py-6 lg:px-10">
             {activeTab === "kasir" && <>
               <form onSubmit={event => { event.preventDefault(); handleCommand(transcript); }} className="relative mb-2"><input id="command-input" value={transcript} onChange={event => setTranscript(event.target.value)} placeholder="Ketik perintah di sini…" className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-4 pr-16 text-sm shadow-sm outline-none transition focus:border-emerald-400 focus:ring-4 focus:ring-emerald-50" /><button className="absolute right-2 top-1/2 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-2xl bg-slate-900 text-white transition hover:bg-emerald-600" aria-label="Kirim perintah"><ArrowRight size={19} /></button></form>
@@ -577,11 +577,11 @@ export default function Home() {
                   {lastHeard && <div className="flex items-start gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-xs text-slate-500"><Volume2 size={15} className="mt-0.5 shrink-0 text-emerald-600" /><span>Terakhir: "{lastHeard}"</span></div>}
                 </div>
 
-                {cart.length > 0 && <div className="fixed bottom-[222px] left-5 right-5 z-10 max-h-[330px] overflow-y-auto rounded-[2rem] bg-transparent p-0 shadow-none lg:static lg:max-h-none lg:overflow-visible lg:rounded-[2rem] lg:bg-white lg:p-5 lg:shadow-sm">
+                {cart.length > 0 && <div className="fixed bottom-[252px] left-5 right-5 z-10 max-h-[300px] overflow-y-auto rounded-[2rem] bg-transparent p-0 shadow-none lg:static lg:max-h-none lg:overflow-visible lg:rounded-[2rem] lg:bg-white lg:p-5 lg:shadow-sm">
                   <div className="flex w-full origin-bottom flex-col justify-end gap-1 text-xs [&>div]:scale-y-[0.9]">{cart.map(item => <div key={item.id}                   className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm"><div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${item.color}`}><span className="text-sm font-black text-slate-600">{item.name.charAt(0)}</span></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{item.name}</div><div className="text-xs text-slate-400">{currency(item.price)} × {item.quantity}</div></div><div className="flex items-center gap-2"><button onClick={() => removeProduct(item.id)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-rose-100 hover:text-rose-600">−</button><span className="w-4 text-center text-sm font-bold">{item.quantity}</span><button onClick={() => addProduct(item)} className="grid h-7 w-7 place-items-center rounded-lg bg-slate-50 text-slate-500 hover:bg-emerald-100 hover:text-emerald-600">+</button></div><div className="w-20 text-right text-sm font-bold">{currency(item.price * item.quantity)}</div></div>)}</div>
                 </div>}
               </section>
-              <div className="fixed bottom-[74px] left-0 right-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:mt-6 lg:border lg:border-slate-100 lg:rounded-[2rem] lg:px-6">
+              <div className="fixed bottom-[102px] left-0 right-0 z-10 border-t border-slate-200 bg-white/95 px-5 py-4 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:static lg:mt-6 lg:border lg:border-slate-100 lg:rounded-[2rem] lg:px-6">
                 <div className="mx-auto max-w-6xl"><div className="flex items-end justify-between"><span className="text-sm font-semibold text-slate-500">Total</span><span className="text-2xl font-black tracking-tight">{currency(total)}</span></div><button disabled={!cart.length} onClick={() => setPending({ type: "checkout", payment, reply: "Siap disimpan sebagai transaksi?" })} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-200"><Save size={17} />Simpan transaksi</button></div>
               </div>
 
@@ -603,15 +603,19 @@ export default function Home() {
           </div>
         </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white/95 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
-          <div className="relative mx-auto flex max-w-lg items-end justify-between">
-            {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex min-w-[70px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold ${activeTab === item.id ? "text-slate-900" : "text-slate-400"}`}><item.icon size={19} /><span>{item.label}</span></button>)}
-            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 grid h-[72px] w-[72px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-8 border-white transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-500 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
+        <nav className="fixed bottom-3 left-1/2 z-20 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 lg:hidden">
+          <div className="relative flex h-[74px] items-center justify-between rounded-[2rem] border border-slate-100 bg-white/95 px-6 shadow-[0_12px_32px_rgba(15,23,42,0.14)] backdrop-blur">
+            <div className="pointer-events-none absolute left-1/2 top-0 h-[64px] w-[132px] -translate-x-1/2 rounded-b-[66px] bg-[#f7f8fa]" />
+            <div className="relative z-10 flex w-[44%] justify-between">
+              {nav.slice(0, 2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${item.id === "produk" ? "-translate-x-[55px]" : ""} ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
+            </div>
+            <button onClick={startListening} aria-label={status === "listening" ? "Berhenti mendengarkan" : "Mulai input suara"} className={`absolute left-1/2 top-0 z-20 grid h-[76px] w-[76px] -translate-x-1/2 -translate-y-[30px] place-items-center rounded-full border-8 border-[#f7f8fa] transition ${status === "listening" ? "bg-rose-500 shadow-xl shadow-rose-200" : "bg-emerald-600 shadow-xl shadow-emerald-200 hover:scale-105"}`}>
               <span className="absolute inset-1 rounded-full border border-white/30" />
               {status === "listening" ? <div className="flex items-center gap-1"><span className="h-5 w-1 rounded-full bg-white animate-pulse" /><span className="h-8 w-1 rounded-full bg-white animate-pulse" /><span className="h-6 w-1 rounded-full bg-white animate-pulse" /></div> : <Mic size={30} className="text-white" />}
             </button>
-            <span className={`pointer-events-none absolute left-1/2 top-[3.8rem] -translate-x-1/2 text-[9px] font-extrabold ${status === "listening" ? "text-rose-500" : "text-emerald-600"}`}>{status === "listening" ? "DENGAR" : "BICARA"}</span>
-            {nav.slice(2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} className={`flex min-w-[70px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-bold ${activeTab === item.id ? "text-slate-900" : "text-slate-400"}`}><item.icon size={19} /><span>{item.label}</span></button>)}
+            <div className="relative z-10 flex w-[44%] justify-between">
+              {nav.slice(2).map(item => <button key={item.id} onClick={() => { setReportDate(null); setActiveTab(item.id); }} aria-label={item.label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${item.id === "riwayat" ? "translate-x-[55px]" : ""} ${activeTab === item.id ? "text-emerald-600" : "text-slate-300 hover:text-slate-500"}`}><item.icon size={22} />{activeTab === item.id && <span className="absolute -bottom-1 h-1.5 w-1.5 rounded-full bg-emerald-500" />}</button>)}
+            </div>
           </div>
         </nav>
       </div>
